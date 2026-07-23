@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   return response;
 }
 
-export async function DELETE(req: NextRequest) {
+export async function DELETE() {
   // Logout — clear session cookie
   const response = NextResponse.json({ success: true });
   response.cookies.delete(SESSION_COOKIE);

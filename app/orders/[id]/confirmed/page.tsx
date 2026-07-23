@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function OrderConfirmedPage() {
   return (
     <div
@@ -40,14 +42,14 @@ export default function OrderConfirmedPage() {
       </p>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", width: "100%" }}>
-        <a
+        <Link
           href="/orders"
           className="btn-accent"
           style={{ display: "flex", justifyContent: "center" }}
         >
           View my orders
-        </a>
-        <a
+        </Link>
+        <Link
           href="/"
           style={{
             display: "flex",
@@ -61,7 +63,7 @@ export default function OrderConfirmedPage() {
           }}
         >
           Back to catalog
-        </a>
+        </Link>
       </div>
     </div>
   );

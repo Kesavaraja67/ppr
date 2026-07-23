@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { vegetables, admins } from "@/drizzle/schema";
+import { vegetables } from "@/drizzle/schema";
 import { eq, asc } from "drizzle-orm";
 import { headers } from "next/headers";
 import { lookupTamilName } from "@/lib/tamil-dict";

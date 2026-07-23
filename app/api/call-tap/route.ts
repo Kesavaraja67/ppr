@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { call_taps, supplier_requests } from "@/drizzle/schema";
+import { call_taps } from "@/drizzle/schema";
 
 // ─── Call tap logging (POST /api/call-tap) ────────────────────────────────────
 export async function POST() {

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 
 export interface OrderItem {
   veg_id: string;
@@ -25,31 +25,30 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<OrderItem[]>([]);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Hydrate from sessionStorage on mount (survives login redirects within same tab)
-  useEffect(() => {
+  const [items, setItems] = useState<OrderItem[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setItems(JSON.parse(stored));
-      }
+      return stored ? JSON.parse(stored) : [];
     } catch {
-      // sessionStorage not available (private browsing edge case) — ignore
+      return [];
     }
-    setHydrated(true);
-  }, []);
+  });
 
-  // Persist to sessionStorage on every change
+  const isMounted = useRef(false);
+
+  // Persist to sessionStorage on changes after initial mount
   useEffect(() => {
-    if (!hydrated) return;
+    if (!isMounted.current) {
+      isMounted.current = true;
+      return;
+    }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       // ignore
     }
-  }, [items, hydrated]);
+  }, [items]);
 
   const setQty = useCallback(
     (

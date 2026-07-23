@@ -47,7 +47,7 @@ npm run db:push
 npm run db:seed
 ```
 
-> ⚠️ **Initial PIN is `0000`** — change it immediately after first login
+> ⚠️ **Initial PIN is `1234`** — change it immediately after first login
 
 ---
 

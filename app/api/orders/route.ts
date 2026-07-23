@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, order_items, addresses, vegetables, users } from "@/drizzle/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCustomerSession } from "@/lib/customer-auth";
 
 // ─── POST /api/orders — create a new order ────────────────────────────────────
@@ -114,19 +114,17 @@ export async function POST(req: NextRequest) {
 
   // Verify all vegetable IDs exist
   const vegIds = body.items.map((i) => i.veg_id);
-  const vegRows = await Promise.all(
-    vegIds.map((id) =>
-      db.select({ id: vegetables.id, unit: vegetables.unit })
-        .from(vegetables)
-        .where(eq(vegetables.id, id))
-        .limit(1)
-    )
-  );
+  const foundVegs = await db
+    .select({ id: vegetables.id, unit: vegetables.unit })
+    .from(vegetables)
+    .where(inArray(vegetables.id, vegIds));
 
-  for (let i = 0; i < vegIds.length; i++) {
-    if (!vegRows[i][0]) {
+  const vegMap = new Map(foundVegs.map((v) => [v.id, v.unit]));
+
+  for (const item of body.items) {
+    if (!vegMap.has(item.veg_id)) {
       return NextResponse.json(
-        { error: `Item not found: ${vegIds[i]}` },
+        { error: `Item not found: ${item.veg_id}` },
         { status: 400 }
       );
     }
@@ -154,11 +152,11 @@ export async function POST(req: NextRequest) {
       .returning({ id: orders.id });
 
     await tx.insert(order_items).values(
-      body.items.map((item, i) => ({
+      body.items.map((item) => ({
         order_id: order.id,
         veg_id: item.veg_id,
         requested_qty: String(item.qty),
-        unit: item.unit || vegRows[i][0]!.unit,
+        unit: item.unit || vegMap.get(item.veg_id) || "kg",
       }))
     );
 

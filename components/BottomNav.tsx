@@ -87,7 +87,7 @@ export default function BottomNav() {
   const pathname = usePathname();
 
   // Hide bottom navigation on staff admin pages (/manage/*)
-  if (pathname.startsWith("/manage")) {
+  if (pathname === "/manage" || pathname.startsWith("/manage/")) {
     return null;
   }
 

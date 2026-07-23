@@ -32,11 +32,16 @@ export default function SuppliersPage() {
 
   const markSeen = async (id: string) => {
     setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, seen: true } : r)));
-    await fetch("/api/admin/suppliers", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, seen: true }),
-    });
+    try {
+      const res = await fetch("/api/admin/suppliers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, seen: true }),
+      });
+      if (!res.ok) throw new Error("Failed to mark as seen");
+    } catch {
+      setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, seen: false } : r)));
+    }
   };
 
   return (

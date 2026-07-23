@@ -51,6 +51,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Shop config not found" }, { status: 404 });
   }
 
+  if (body.lat !== undefined && (typeof body.lat !== "number" || !Number.isFinite(body.lat) || body.lat < -90 || body.lat > 90)) {
+    return NextResponse.json({ error: "Invalid lat coordinate" }, { status: 400 });
+  }
+  if (body.long !== undefined && (typeof body.long !== "number" || !Number.isFinite(body.long) || body.long < -180 || body.long > 180)) {
+    return NextResponse.json({ error: "Invalid long coordinate" }, { status: 400 });
+  }
+  const numericFields: Array<[string, number | undefined]> = [
+    ["delivery_radius_km", body.delivery_radius_km],
+    ["free_delivery_veg_threshold", body.free_delivery_veg_threshold],
+    ["free_delivery_fruit_threshold", body.free_delivery_fruit_threshold],
+    ["free_delivery_mixed_threshold", body.free_delivery_mixed_threshold],
+    ["flat_delivery_charge", body.flat_delivery_charge],
+  ];
+
+  for (const [name, val] of numericFields) {
+    if (val !== undefined && (typeof val !== "number" || !Number.isFinite(val) || val < 0)) {
+      return NextResponse.json({ error: `Invalid non-negative number for ${name}` }, { status: 400 });
+    }
+  }
+
   await db
     .update(shop_config)
     .set({

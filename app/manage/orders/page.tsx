@@ -439,7 +439,7 @@ export default function AdminOrdersPage() {
                     <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{entry.name_en}</span>
                     <span style={{ color: "#9ca3af", fontSize: "0.8rem", marginLeft: "6px" }}>({entry.name_ta})</span>
                   </div>
-                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "#166634" }}>
+                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "#166534" }}>
                     {entry.total_qty} {entry.unit}
                   </span>
                 </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, order_items, users, addresses, vegetables } from "@/drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { headers } from "next/headers";
 
 // GET /api/admin/orders — list tomorrow's orders for the admin dashboard
@@ -48,26 +48,37 @@ export async function GET(req: NextRequest) {
     .leftJoin(addresses, eq(orders.address_id, addresses.id))
     .where(whereClause);
 
-  // For each order, fetch its items with vegetable details
-  const ordersWithItems = await Promise.all(
-    pendingOrders.map(async (order) => {
-      const items = await db
-        .select({
-          id: order_items.id,
-          veg_id: order_items.veg_id,
-          requested_qty: order_items.requested_qty,
-          unit: order_items.unit,
-          name_en: vegetables.name_en,
-          name_ta: vegetables.name_ta,
-          category: vegetables.category,
-        })
-        .from(order_items)
-        .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
-        .where(eq(order_items.order_id, order.id));
+  const orderIds = pendingOrders.map((o) => o.id);
+  const allItems =
+    orderIds.length > 0
+      ? await db
+          .select({
+            id: order_items.id,
+            order_id: order_items.order_id,
+            veg_id: order_items.veg_id,
+            requested_qty: order_items.requested_qty,
+            unit: order_items.unit,
+            name_en: vegetables.name_en,
+            name_ta: vegetables.name_ta,
+            category: vegetables.category,
+          })
+          .from(order_items)
+          .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
+          .where(inArray(order_items.order_id, orderIds))
+      : [];
 
-      return { ...order, items };
-    })
-  );
+  const itemsByOrderId = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    if (!item.order_id) continue;
+    const list = itemsByOrderId.get(item.order_id) ?? [];
+    list.push(item);
+    itemsByOrderId.set(item.order_id, list);
+  }
+
+  const ordersWithItems = pendingOrders.map((order) => ({
+    ...order,
+    items: itemsByOrderId.get(order.id) ?? [],
+  }));
 
   // Aggregated shopping list — sum quantities per vegetable across pending orders
   const aggregated: Record<

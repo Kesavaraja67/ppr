@@ -44,7 +44,7 @@ export function computeDeliveryCharge(
     .filter((l) => l.category === "fruit")
     .reduce((sum, l) => sum + l.line_total, 0);
 
-  const subtotal = vegetable_total + fruit_total;
+  const subtotal = lines.reduce((sum, l) => sum + l.line_total, 0);
 
   const has_vegetables = vegetable_total > 0;
   const has_fruits = fruit_total > 0;
@@ -52,19 +52,21 @@ export function computeDeliveryCharge(
   let threshold: number;
   let relevant_total: number;
 
-  if (has_vegetables && has_fruits) {
+  if (!has_vegetables && !has_fruits) {
+    threshold = 0;
+    relevant_total = 0;
+  } else if (has_vegetables && has_fruits) {
     threshold = config.free_delivery_mixed_threshold;
     relevant_total = subtotal;
   } else if (has_vegetables) {
     threshold = config.free_delivery_veg_threshold;
     relevant_total = vegetable_total;
   } else {
-    // fruit only (or empty, edge case)
     threshold = config.free_delivery_fruit_threshold;
     relevant_total = fruit_total;
   }
 
-  const is_free_delivery = relevant_total >= threshold;
+  const is_free_delivery = subtotal === 0 || relevant_total >= threshold;
   const delivery_charge = is_free_delivery ? 0 : config.flat_delivery_charge;
   const total_amount = subtotal + delivery_charge;
 

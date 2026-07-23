@@ -98,7 +98,7 @@ export async function sendOTP(phone: string): Promise<{ success: true; sessionId
 
   try {
     const url = `${TWOFACTOR_BASE}/${TWOFACTOR_API_KEY}/SMS/${cleaned}/AUTOGEN`;
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(8000) });
 
     if (!res.ok) {
       return { success: false, error: "OTP gateway error" };
@@ -134,7 +134,7 @@ export async function verifyOTP(
 
   try {
     const url = `${TWOFACTOR_BASE}/${TWOFACTOR_API_KEY}/SMS/VERIFY/${sessionId}/${cleaned}`;
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(8000) });
 
     if (!res.ok) {
       return { success: false, error: "OTP gateway error" };

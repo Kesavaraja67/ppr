@@ -20,7 +20,14 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { id, seen } = await req.json();
+  let body: { id?: string; seen?: boolean };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const { id, seen } = body;
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
   await db

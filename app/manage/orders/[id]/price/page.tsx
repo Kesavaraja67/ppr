@@ -25,7 +25,7 @@ interface Order {
   user_phone?: string;
 }
 
-// Resizes and compresses image client-side for PDF attachment
+// Builds HTML bill for PDF attachment / printing
 async function generatePDFData(order: Order, items: OrderItem[], shopName: string) {
   // Build HTML string and print to PDF via browser's print dialog
   const priced = items.filter((i) => i.price_per_unit !== null);

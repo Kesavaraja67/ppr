@@ -43,7 +43,7 @@ async function main() {
       pin_hash,
       role: "owner",
     });
-    console.log(`✅ Admin created — PIN: ${INITIAL_PIN} (CHANGE THIS NOW)`);
+    console.log("✅ Admin created — check seed script comments for the initial PIN. CHANGE IT NOW.");
   } else {
     console.log("ℹ️  Admin already exists — skipped");
   }
@@ -78,19 +78,19 @@ async function main() {
     .limit(1);
 
   if (existingVegs.length === 0) {
-    const starterVegs = [
-      { name_en: "Tomato", name_ta: "தக்காளி", unit: "kg", current_price: 40, image_url: "/curated/tomato.png", is_curated_image: true },
-      { name_en: "Onion", name_ta: "வெங்காயம்", unit: "kg", current_price: 35, image_url: "/curated/onion.png", is_curated_image: true },
-      { name_en: "Potato", name_ta: "உருளைக்கிழங்கு", unit: "kg", current_price: 30, image_url: "/curated/potato.png", is_curated_image: true },
-      { name_en: "Carrot", name_ta: "கேரட்", unit: "kg", current_price: 50, image_url: "/curated/carrot.png", is_curated_image: true },
-      { name_en: "Brinjal", name_ta: "கத்திரிக்காய்", unit: "kg", current_price: 45, image_url: "/curated/brinjal.png", is_curated_image: true },
-      { name_en: "Okra", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: 60, image_url: "/curated/okra.png", is_curated_image: true },
-      { name_en: "Cucumber", name_ta: "வெள்ளரிக்காய்", unit: "kg", current_price: 25, image_url: "/curated/cucumber.png", is_curated_image: true },
-      { name_en: "Beetroot", name_ta: "பீட்ரூட்", unit: "kg", current_price: 40, image_url: "/curated/beetroot.png", is_curated_image: true },
-      { name_en: "Spinach", name_ta: "பசலைக் கீரை", unit: "bunch", current_price: 15, image_url: "/curated/spinach.png", is_curated_image: true },
-      { name_en: "Coriander", name_ta: "கொத்தமல்லி", unit: "bunch", current_price: 10, image_url: "/curated/coriander.png", is_curated_image: true },
-      { name_en: "Banana", name_ta: "வாழைப்பழம்", unit: "dozen", current_price: 40, image_url: "/curated/banana.png", is_curated_image: true },
-      { name_en: "Mango", name_ta: "மாம்பழம்", unit: "kg", current_price: 80, image_url: "/curated/mango.png", is_curated_image: true },
+    const starterVegs: Array<typeof schema.vegetables.$inferInsert> = [
+      { name_en: "Tomato", name_ta: "தக்காளி", unit: "kg", current_price: "40", image_url: "/curated/tomato.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Onion", name_ta: "வெங்காயம்", unit: "kg", current_price: "35", image_url: "/curated/onion.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Potato", name_ta: "உருளைக்கிழங்கு", unit: "kg", current_price: "30", image_url: "/curated/potato.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Carrot", name_ta: "கேரட்", unit: "kg", current_price: "50", image_url: "/curated/carrot.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Brinjal", name_ta: "கத்திரிக்காய்", unit: "kg", current_price: "45", image_url: "/curated/brinjal.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Okra", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: "60", image_url: "/curated/okra.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Cucumber", name_ta: "வெள்ளரிக்காய்", unit: "kg", current_price: "25", image_url: "/curated/cucumber.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Beetroot", name_ta: "பீட்ரூட்", unit: "kg", current_price: "40", image_url: "/curated/beetroot.png", is_curated_image: true, category: "vegetable" },
+      { name_en: "Spinach", name_ta: "பசலைக் கீரை", unit: "bunch", current_price: "15", image_url: "/curated/spinach.png", is_curated_image: true, category: "leafy" },
+      { name_en: "Coriander", name_ta: "கொத்தமல்லி", unit: "bunch", current_price: "10", image_url: "/curated/coriander.png", is_curated_image: true, category: "leafy" },
+      { name_en: "Banana", name_ta: "வாழைப்பழம்", unit: "dozen", current_price: "40", image_url: "/curated/banana.png", is_curated_image: true, category: "fruit" },
+      { name_en: "Mango", name_ta: "மாம்பழம்", unit: "kg", current_price: "80", image_url: "/curated/mango.png", is_curated_image: true, category: "fruit" },
     ];
 
     for (const veg of starterVegs) {

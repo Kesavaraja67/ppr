@@ -25,6 +25,16 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  if (!Array.isArray(body.prices)) {
+    return NextResponse.json({ error: "prices must be an array" }, { status: 400 });
+  }
+
+  for (const p of body.prices) {
+    if (!p.item_id || typeof p.price_per_unit !== "number" || !Number.isFinite(p.price_per_unit) || p.price_per_unit < 0) {
+      return NextResponse.json({ error: "Invalid price values provided" }, { status: 400 });
+    }
+  }
+
   // Load order items with vegetable categories
   const items = await db
     .select({

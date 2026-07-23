@@ -130,10 +130,10 @@ export default function ConfirmOrderPage() {
         setSubmitError("Please tap 'Use my location' to pin your delivery location.");
         return;
       }
-      const withinRange = isWithinRange();
+      const withinRange = shopCoords ? isWithinRange() : true;
       if (!withinRange) {
         setSubmitError(
-          `Sorry, your location is outside our 3km delivery zone. Please call ${shopCoords ? "" : "the shop"} to discuss options.`
+          `Sorry, your location is outside our ${shopCoords?.radius ?? 3}km delivery zone. Please call the shop at 94437 21544 to discuss options.`
         );
         return;
       }

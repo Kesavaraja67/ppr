@@ -51,6 +51,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const ALLOWED_CATEGORIES = ["vegetable", "fruit", "leafy"];
+  if (!ALLOWED_CATEGORIES.includes(body.category)) {
+    return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+  }
+
+  if (body.image_data_url && body.image_data_url.length > 500000) {
+    return NextResponse.json({ error: "Image payload too large (max 500KB)" }, { status: 400 });
+  }
+
   // Auto-fill Tamil name from static dictionary if not provided
   const nameTa =
     body.name_ta?.trim() ||
@@ -102,6 +111,14 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
+  if (body.category !== undefined && !["vegetable", "fruit", "leafy"].includes(body.category)) {
+    return NextResponse.json({ error: "Invalid category" }, { status: 400 });
+  }
+
+  if (body.image_data_url && body.image_data_url.length > 500000) {
+    return NextResponse.json({ error: "Image payload too large (max 500KB)" }, { status: 400 });
+  }
+
   await db
     .update(vegetables)
     .set({
@@ -139,6 +156,10 @@ export async function DELETE(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  if (!body.id) {
+    return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
   // Mark as inactive (in_stock = false effectively hides it from catalog)

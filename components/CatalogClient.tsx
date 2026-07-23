@@ -1,0 +1,1113 @@
+"use client";
+
+import Image from "next/image";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useOrderList } from "./OrderListProvider";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface Vegetable {
+  id: string;
+  name_en: string;
+  name_ta: string;
+  unit: string;
+  category: string;
+  in_stock: boolean;
+  image_url: string | null;
+}
+
+interface ShopConfig {
+  shop_name: string;
+  owner_name: string;
+  phone_number: string;
+  lat: number;
+  long: number;
+  delivery_radius_km: number;
+  covered_areas: string[];
+}
+
+interface Props {
+  vegetables: Vegetable[];
+  config: ShopConfig | null;
+}
+
+// ── Product card color palette ────────────────────────────────────────────────
+// Colors are deterministic per product — stable across filter changes
+// Palette: cohesive nature-inspired pastels — no jarring hue jumps between adjacent cards
+const CARD_COLORS = [
+  { bg: "#F0F7F2", circle: "#C8E6CF" },  // mint green
+  { bg: "#F5F9EC", circle: "#D9EDBB" },  // lime mist
+  { bg: "#FBF8F0", circle: "#EDE0BC" },  // warm cream
+  { bg: "#F2F7F4", circle: "#BDD9CA" },  // sage
+  { bg: "#F8F5F0", circle: "#E8D9C4" },  // sand beige
+  { bg: "#EFF6F2", circle: "#B8DEC9" },  // pale teal
+  { bg: "#F9F6EE", circle: "#E4D5A9" },  // honey cream
+  { bg: "#F2F9F5", circle: "#C0E2D2" },  // seafoam
+  { bg: "#F7F4EF", circle: "#DDD0B5" },  // warm linen
+  { bg: "#EEF6F0", circle: "#BBDCC8" },  // soft moss
+  { bg: "#FAFAF2", circle: "#E2E8B5" },  // citrus mist
+  { bg: "#F0F5F7", circle: "#BDD4DC" },  // pale sky
+];
+
+function hashIndex(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) {
+    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h) % CARD_COLORS.length;
+}
+
+// ── SVG Icons ─────────────────────────────────────────────────────────────────
+function LeafIcon({ size = 18, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.9.9 7.1A5 5 0 0 1 12 20z" />
+      <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+    </svg>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#AAAAAA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function PhoneIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41 2 2 0 0 1 3.6 1.21h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l.91-1.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 15z" />
+    </svg>
+  );
+}
+
+function PinIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
+
+function OrderIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
+  );
+}
+
+function OrderIconWhite() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
+  );
+}
+
+// Small gear icon for the staff-only admin shortcut in the header
+function SettingsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 8.6 15a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 15 8.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83z" />
+    </svg>
+  );
+}
+
+// ── Step icons for How it works ────────────────────────────────────────────────
+const STEPS = [
+  {
+    label: "Browse & add to list",
+    desc: "Pick your fresh produce",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z" />
+        <line x1="3" y1="6" x2="21" y2="6" />
+        <path d="M16 10a4 4 0 01-8 0" />
+      </svg>
+    ),
+  },
+  {
+    label: "Order before midnight",
+    desc: "We confirm every night before 10 PM",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+      </svg>
+    ),
+  },
+  {
+    label: "Delivered tomorrow",
+    desc: "Fresh to your door, next morning",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="1" y="3" width="15" height="13" />
+        <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+        <circle cx="5.5" cy="18.5" r="2.5" />
+        <circle cx="18.5" cy="18.5" r="2.5" />
+      </svg>
+    ),
+  },
+  {
+    label: "Pay on delivery",
+    desc: "Cash on arrival — no advance payment",
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="1" y="4" width="22" height="16" rx="2" />
+        <line x1="1" y1="10" x2="23" y2="10" />
+      </svg>
+    ),
+  },
+];
+
+// ── Stepper ───────────────────────────────────────────────────────────────────
+function Stepper({
+  qty,
+  onDecrement,
+  onIncrement,
+}: {
+  qty: number;
+  onDecrement: () => void;
+  onIncrement: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "#1A6B47",
+        borderRadius: "9999px",
+        height: "40px",
+        width: "100%",
+        overflow: "hidden",
+      }}
+    >
+      <button
+        onClick={onDecrement}
+        aria-label="Decrease quantity"
+        style={{
+          width: "44px",
+          height: "100%",
+          background: "none",
+          border: "none",
+          color: "#fff",
+          fontSize: "1.25rem",
+          fontWeight: 600,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          fontFamily: "var(--font)",
+        }}
+      >
+        −
+      </button>
+      <span
+        style={{
+          color: "#fff",
+          fontSize: "0.9rem",
+          fontWeight: 700,
+          fontFamily: "var(--font)",
+          minWidth: "20px",
+          textAlign: "center",
+        }}
+      >
+        {qty}
+      </span>
+      <button
+        onClick={onIncrement}
+        aria-label="Increase quantity"
+        style={{
+          width: "44px",
+          height: "100%",
+          background: "none",
+          border: "none",
+          color: "#fff",
+          fontSize: "1.25rem",
+          fontWeight: 600,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          fontFamily: "var(--font)",
+        }}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+// ── Order list icon (green bg for white header) ───────────────────────────────
+function OrderListIcon({ count }: { count: number }) {
+  return (
+    <button
+      aria-label={`View order list — ${count} item${count !== 1 ? "s" : ""}`}
+      style={{
+        position: "relative",
+        background: "#E6F4EE",
+        border: "none",
+        cursor: "pointer",
+        padding: "10px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        borderRadius: "14px",
+        width: "44px",
+        height: "44px",
+        flexShrink: 0,
+        transition: "background 150ms",
+      }}
+      onClick={() => {
+        if (typeof window !== "undefined") window.location.href = "/confirm-order";
+      }}
+    >
+      <OrderIcon />
+      {count > 0 && (
+        <span
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: "-4px",
+            right: "-4px",
+            background: "#1A6B47",
+            color: "#fff",
+            fontSize: "0.6rem",
+            fontWeight: 700,
+            minWidth: "18px",
+            height: "18px",
+            borderRadius: "9999px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 4px",
+            fontFamily: "var(--font)",
+          }}
+        >
+          {count > 99 ? "99+" : count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+// ── Product Card ──────────────────────────────────────────────────────────────
+function ProductCard({ veg }: { veg: Vegetable }) {
+  const { setQty, getQty } = useOrderList();
+  const qty = getQty(veg.id);
+  const color = CARD_COLORS[hashIndex(veg.id)];
+
+  const increment = () =>
+    setQty(veg.id, qty + 1, {
+      name_en: veg.name_en,
+      name_ta: veg.name_ta,
+      unit: veg.unit,
+      image_url: veg.image_url,
+    });
+
+  const decrement = () => setQty(veg.id, Math.max(0, qty - 1));
+
+  return (
+    <div
+      className="product-card"
+      style={{ opacity: veg.in_stock ? 1 : 0.55 }}
+      aria-label={`${veg.name_en} — ${veg.name_ta}`}
+    >
+      {/* Colored image area */}
+      <div
+        style={{
+          background: color.bg,
+          height: "148px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "16px",
+          position: "relative",
+          overflow: "hidden",
+        }}
+      >
+        {/* Subtle decorative circle */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            bottom: "-28px",
+            right: "-28px",
+            width: "100px",
+            height: "100px",
+            borderRadius: "50%",
+            background: color.circle,
+            opacity: 0.4,
+            pointerEvents: "none",
+          }}
+        />
+
+        {veg.image_url ? (
+          <Image
+            src={veg.image_url}
+            alt={veg.name_en}
+            width={110}
+            height={110}
+            priority={true}
+            style={{
+              objectFit: "contain",
+              maxHeight: "110px",
+              width: "auto",
+              position: "relative",
+              zIndex: 1,
+              filter: "drop-shadow(0 4px 10px rgba(0,0,0,0.13))",
+            }}
+          />
+        ) : (
+          // Fallback: first-letter monogram circle
+          <div
+            style={{
+              position: "relative",
+              zIndex: 1,
+              width: "72px",
+              height: "72px",
+              borderRadius: "50%",
+              background: color.circle,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: "1.6rem",
+              fontWeight: 700,
+              color: "rgba(0,0,0,0.35)",
+              fontFamily: "var(--font)",
+              letterSpacing: "-0.02em",
+            }}
+            aria-hidden="true"
+          >
+            {veg.name_en[0].toUpperCase()}
+          </div>
+        )}
+
+        {/* Out of stock overlay */}
+        {!veg.in_stock && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(20, 20, 20, 0.42)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              backdropFilter: "blur(2px)",
+            }}
+          >
+            <span
+              style={{
+                background: "rgba(255,255,255,0.94)",
+                color: "#666",
+                fontSize: "0.7rem",
+                fontWeight: 700,
+                fontFamily: "var(--font)",
+                padding: "4px 12px",
+                borderRadius: "9999px",
+                letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}
+            >
+              Unavailable
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* White info area */}
+      <div style={{ padding: "12px 14px 14px" }}>
+        <p
+          style={{
+            fontWeight: 700,
+            fontSize: "0.9rem",
+            lineHeight: 1.3,
+            marginBottom: "3px",
+            color: "var(--text-primary)",
+            fontFamily: "var(--font)",
+          }}
+        >
+          {veg.name_en}
+        </p>
+        <p
+          style={{
+            color: "var(--text-muted)",
+            fontSize: "0.72rem",
+            fontWeight: 600,
+            marginBottom: "12px",
+            fontFamily: "var(--font)",
+          }}
+        >
+          {veg.name_ta} · per {veg.unit}
+        </p>
+
+        {veg.in_stock ? (
+          qty === 0 ? (
+            <button
+              onClick={increment}
+              style={{
+                width: "100%",
+                height: "40px",
+                background: "#1A6B47",
+                color: "#fff",
+                border: "none",
+                borderRadius: "9999px",
+                fontFamily: "var(--font)",
+                fontWeight: 600,
+                fontSize: "0.8rem",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                transition: "background 150ms",
+              }}
+              onMouseOver={(e) => (e.currentTarget.style.background = "#124D33")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "#1A6B47")}
+            >
+              <PlusIcon />
+              Add to Cart
+            </button>
+          ) : (
+            <Stepper qty={qty} onDecrement={decrement} onIncrement={increment} />
+          )
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Catalog ──────────────────────────────────────────────────────────────
+export default function CatalogClient({ vegetables: allVegs, config }: Props) {
+  const router = useRouter();
+  const { totalCount } = useOrderList();
+
+  type Category = "all" | "vegetable" | "fruit" | "leafy";
+  const [category, setCategory] = useState<Category>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showIosBanner, setShowIosBanner] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
+  const [showAndroidInstall, setShowAndroidInstall] = useState(false);
+
+  // Android PWA install
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowAndroidInstall(true);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  // iOS install banner
+  useEffect(() => {
+    const isIos =
+      /iphone|ipad|ipod/i.test(navigator.userAgent) &&
+      !(
+        navigator.userAgent.includes("CriOS") ||
+        navigator.userAgent.includes("FxiOS")
+      );
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
+    if (isIos && !isStandalone) {
+      const timer = setTimeout(() => setShowIosBanner(true), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const handleAndroidInstall = async () => {
+    if (!deferredPrompt) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (deferredPrompt as any).prompt();
+    setShowAndroidInstall(false);
+    setDeferredPrompt(null);
+  };
+
+  // Filter + search
+  const filtered = allVegs
+    .filter((v) => category === "all" || v.category === category)
+    .filter(
+      (v) =>
+        !searchQuery ||
+        v.name_en.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        v.name_ta.includes(searchQuery)
+    );
+
+  const categories: Array<{ id: Category; label: string }> = [
+    { id: "all",       label: "All Items" },
+    { id: "vegetable", label: "Vegetables" },
+    { id: "fruit",     label: "Fruits" },
+    { id: "leafy",     label: "Leafy Greens" },
+  ];
+
+  const activeLabel = categories.find((c) => c.id === category)?.label ?? "Fresh Picks";
+
+  return (
+    <div className="page-content">
+
+      {/* ── Minimal Sticky Header ─────────────────────────────────────── */}
+      <header className="catalog-header">
+        {/* Brand row */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            marginBottom: "14px",
+            minHeight: "52px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src="/logo.png" 
+              alt="P.P.R. Fruits & Vegetables Logo" 
+              style={{ 
+                height: "48px", 
+                width: "auto", 
+                objectFit: "contain",
+                flexShrink: 0,
+                display: "block",
+              }} 
+            />
+            <div>
+              <p
+                style={{
+                  color: "var(--text-muted)",
+                  fontSize: "0.65rem",
+                  fontFamily: "var(--font)",
+                  fontWeight: 500,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  lineHeight: 1,
+                  marginBottom: "4px",
+                }}
+              >
+                Fresh daily · Coimbatore
+              </p>
+              <h1
+                style={{
+                  fontSize: "1.1rem",
+                  fontWeight: 700,
+                  fontFamily: "var(--font)",
+                  color: "var(--text-primary)",
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                P.P.R. Fruits &amp; Vegetables
+              </h1>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", alignSelf: "center" }}>
+            {showAndroidInstall && (
+              <button
+                onClick={handleAndroidInstall}
+                style={{
+                  fontSize: "0.72rem",
+                  padding: "7px 12px",
+                  background: "#E6F4EE",
+                  color: "#1A6B47",
+                  border: "1.5px solid #C3E6D0",
+                  borderRadius: "9999px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                }}
+              >
+                Install
+              </button>
+            )}
+            {/* Staff-only admin shortcut — deliberately low contrast, no label */}
+            <a
+              href="/manage"
+              aria-label="Staff login"
+              style={{
+                color: "var(--text-muted)",
+                opacity: 0.45,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "6px",
+              }}
+            >
+              <SettingsIcon />
+            </a>
+            <OrderListIcon count={totalCount} />
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            background: "#F5F7F6",
+            borderRadius: "13px",
+            padding: "12px 16px",
+            border: "1.5px solid var(--border)",
+          }}
+        >
+          <SearchIcon />
+          <input
+            type="text"
+            placeholder="Search vegetables, fruits…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              flex: 1,
+              border: "none",
+              outline: "none",
+              fontFamily: "var(--font)",
+              fontSize: "0.88rem",
+              color: "var(--text-primary)",
+              background: "transparent",
+            }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+              style={{
+                background: "var(--border-md)",
+                border: "none",
+                cursor: "pointer",
+                width: "22px",
+                height: "22px",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--text-muted)",
+                flexShrink: 0,
+              }}
+            >
+              <CloseIcon />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* ── Category Pills ───────────────────────────────────────────────── */}
+      <div className="cat-pill-row">
+        {categories.map((cat) => (
+          <button
+            key={cat.id}
+            className={`cat-pill${category === cat.id ? " active" : ""}`}
+            onClick={() => setCategory(cat.id)}
+            aria-pressed={category === cat.id}
+          >
+            {cat.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Section Header ──────────────────────────────────────────────── */}
+      <div
+        style={{
+          padding: "20px 16px 12px",
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "space-between",
+        }}
+      >
+        <div>
+          <h2
+            style={{
+              fontSize: "1.1rem",
+              fontWeight: 700,
+              fontFamily: "var(--font)",
+              color: "var(--text-primary)",
+              lineHeight: 1.2,
+              letterSpacing: "-0.01em",
+            }}
+          >
+            {searchQuery ? `Results for "${searchQuery}"` : activeLabel}
+          </h2>
+          <p
+            style={{
+              fontSize: "0.75rem",
+              color: "var(--text-muted)",
+              fontFamily: "var(--font)",
+              marginTop: "3px",
+            }}
+          >
+            {filtered.length} item{filtered.length !== 1 ? "s" : ""} in stock
+          </p>
+        </div>
+        <a
+          href={`tel:${config?.phone_number}`}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "#E6F4EE",
+            color: "#1A6B47",
+            padding: "9px 15px",
+            borderRadius: "9999px",
+            fontSize: "0.75rem",
+            fontWeight: 600,
+            fontFamily: "var(--font)",
+            flexShrink: 0,
+            border: "1.5px solid #C3E6D0",
+          }}
+        >
+          <PhoneIcon size={14} />
+          Call Shop
+        </a>
+      </div>
+
+      {/* ── Product Grid ─────────────────────────────────────────────────── */}
+      <main
+        id="product-grid"
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          gap: "12px",
+          padding: "0 16px",
+        }}
+      >
+        {filtered.length === 0 ? (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              textAlign: "center",
+              padding: "64px 24px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "64px",
+                height: "64px",
+                borderRadius: "50%",
+                background: "#F5F5F5",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: "16px",
+              }}
+              aria-hidden="true"
+            >
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#CCCCCC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+            <p
+              style={{
+                fontFamily: "var(--font)",
+                fontWeight: 700,
+                fontSize: "1rem",
+                color: "var(--text-secondary)",
+                marginBottom: "6px",
+              }}
+            >
+              {searchQuery ? "No results found" : "Nothing here yet"}
+            </p>
+            <p
+              style={{
+                fontFamily: "var(--font)",
+                fontSize: "0.8rem",
+                color: "var(--text-muted)",
+              }}
+            >
+              {searchQuery
+                ? "Try a different search term"
+                : "Check back soon for fresh stock"}
+            </p>
+          </div>
+        ) : (
+          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} />)
+        )}
+      </main>
+
+      {/* ── How It Works ─────────────────────────────────────────────────── */}
+      <section style={{ padding: "40px 16px 16px" }}>
+        <h2
+          style={{
+            fontFamily: "var(--font)",
+            fontSize: "1.05rem",
+            fontWeight: 700,
+            color: "var(--text-primary)",
+            letterSpacing: "-0.01em",
+            marginBottom: "16px",
+          }}
+        >
+          How it works
+        </h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          {STEPS.map((step, i) => (
+            <div key={i} className="step-card">
+              <div className="step-icon">{step.icon}</div>
+              <div style={{ flex: 1 }}>
+                <p
+                  style={{
+                    fontWeight: 600,
+                    fontSize: "0.88rem",
+                    fontFamily: "var(--font)",
+                    color: "var(--text-primary)",
+                    lineHeight: 1.3,
+                  }}
+                >
+                  {step.label}
+                </p>
+                <p
+                  style={{
+                    fontSize: "0.74rem",
+                    color: "var(--text-muted)",
+                    fontFamily: "var(--font)",
+                    marginTop: "2px",
+                  }}
+                >
+                  {step.desc}
+                </p>
+              </div>
+              <div className="step-number" aria-hidden="true">
+                {i + 1}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Delivery Coverage ────────────────────────────────────────────── */}
+      {config?.covered_areas && config.covered_areas.length > 0 && (
+        <section style={{ padding: "8px 16px 24px" }}>
+          <div
+            style={{
+              background: "#F5F7F6",
+              border: "1.5px solid var(--border)",
+              borderRadius: "var(--radius-xl)",
+              padding: "20px",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                marginBottom: "14px",
+              }}
+            >
+              <div
+                style={{
+                  width: "34px",
+                  height: "34px",
+                  background: "#1A6B47",
+                  borderRadius: "9px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#fff",
+                  flexShrink: 0,
+                }}
+              >
+                <PinIcon />
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontFamily: "var(--font)",
+                    fontWeight: 700,
+                    fontSize: "0.92rem",
+                    color: "var(--text-primary)",
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  Delivery areas
+                </p>
+                <p
+                  style={{
+                    fontFamily: "var(--font)",
+                    fontSize: "0.72rem",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  We deliver to these neighbourhoods
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+              {config.covered_areas.map((area) => (
+                <span
+                  key={area}
+                  style={{
+                    background: "#E6F4EE",
+                    color: "#1A6B47",
+                    fontSize: "0.74rem",
+                    fontFamily: "var(--font)",
+                    fontWeight: 600,
+                    padding: "5px 12px",
+                    borderRadius: "9999px",
+                    border: "1px solid #C3E6D0",
+                  }}
+                >
+                  {area}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
+      <footer
+        style={{
+          padding: "24px 16px 20px",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          gap: "8px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <LeafIcon size={14} color="#1A6B47" />
+          <p
+            style={{
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              fontFamily: "var(--font)",
+              color: "var(--text-secondary)",
+            }}
+          >
+            {config?.shop_name ?? "P.P.R. Fruits & Vegetables"}
+          </p>
+        </div>
+        <p
+          style={{
+            fontSize: "0.72rem",
+            color: "var(--text-muted)",
+            fontFamily: "var(--font)",
+          }}
+          suppressHydrationWarning
+        >
+          © {new Date().getFullYear()}
+          {"  ·  "}
+          <a href="/sell-to-us" style={{ color: "#1A6B47", fontWeight: 500 }}>
+            Sell to us
+          </a>
+        </p>
+      </footer>
+
+      {/* ── iOS Install Banner ────────────────────────────────────────────── */}
+      {showIosBanner && (
+        <div className="ios-banner">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "8px",
+            }}
+          >
+            <p
+              style={{
+                fontWeight: 700,
+                fontSize: "0.92rem",
+                fontFamily: "var(--font)",
+              }}
+            >
+              Add to Home Screen
+            </p>
+            <button
+              onClick={() => setShowIosBanner(false)}
+              aria-label="Close banner"
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "var(--text-muted)",
+                padding: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <CloseIcon />
+            </button>
+          </div>
+          <p
+            style={{
+              fontSize: "0.8rem",
+              color: "var(--text-secondary)",
+              fontFamily: "var(--font)",
+              lineHeight: 1.5,
+            }}
+          >
+            Tap <strong>Share</strong> then{" "}
+            <strong>&quot;Add to Home Screen&quot;</strong> to install.
+          </p>
+        </div>
+      )}
+
+      {/* ── Sticky Order Bar ─────────────────────────────────────────────── */}
+      {totalCount > 0 && (
+        <div className="sticky-bar">
+          <button
+            className="btn-accent"
+            style={{
+              width: "100%",
+              justifyContent: "space-between",
+              padding: "15px 20px",
+            }}
+            onClick={() => router.push("/confirm-order")}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <OrderIconWhite />
+              Review Order
+            </div>
+            <span
+              style={{
+                background: "rgba(255,255,255,0.2)",
+                borderRadius: "9999px",
+                padding: "3px 12px",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                fontFamily: "var(--font)",
+              }}
+            >
+              {totalCount} {totalCount === 1 ? "item" : "items"}
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

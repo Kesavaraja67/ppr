@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Exclude admin routes from indexing
+Disallow: /manage
+Disallow: /api/
+
+Sitemap: https://ppr-fruits-and-vegetables.vercel.app/sitemap.xml

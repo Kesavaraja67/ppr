@@ -19,7 +19,9 @@ function LoginForm() {
   const otpInputRef = useRef<HTMLInputElement>(null);
 
   const handleSendOtp = async () => {
-    const cleaned = phone.replace(/\D/g, "").replace(/^91/, "");
+    // Strip country code only when user types full +91 / 91 prefix
+    const raw = phone.replace(/\D/g, "");
+    const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
@@ -66,7 +68,10 @@ function LoginForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: phone.replace(/\D/g, "").replace(/^91/, ""),
+          phone: (() => {
+            const r = phone.replace(/\D/g, "");
+            return r.length === 12 && r.startsWith("91") ? r.slice(2) : r;
+          })(),
           otp: code,
           sessionId,
         }),

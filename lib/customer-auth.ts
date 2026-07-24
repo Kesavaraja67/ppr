@@ -4,9 +4,10 @@ import { cookies } from "next/headers";
 export const CUSTOMER_SESSION_COOKIE = "ppr_customer_session";
 const SESSION_DURATION_DAYS = 75; // 60-90 day range per spec
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.CUSTOMER_JWT_SECRET ?? "fallback-customer-secret-change-in-production"
-);
+if (!process.env.CUSTOMER_JWT_SECRET) {
+  throw new Error("CUSTOMER_JWT_SECRET environment variable is required");
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.CUSTOMER_JWT_SECRET);
 
 // ─── Session management ──────────────────────────────────────────────────────
 

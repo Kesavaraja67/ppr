@@ -156,6 +156,8 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     if (res.ok) {
       const d = await res.json();
       setOrder(d.order);
+      // Refresh items so the bill PDF reflects the saved prices
+      if (d.items) setItems(d.items);
       setSaved(true);
     } else {
       alert("Failed to save prices. Please try again.");

@@ -7,9 +7,11 @@ import { cookies } from "next/headers";
 
 const SESSION_COOKIE = "ppr_session";
 const SESSION_DURATION_DAYS = 30;
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.ADMIN_JWT_SECRET ?? "fallback-secret-change-in-production"
-);
+
+if (!process.env.ADMIN_JWT_SECRET) {
+  throw new Error("ADMIN_JWT_SECRET environment variable is required");
+}
+const JWT_SECRET = new TextEncoder().encode(process.env.ADMIN_JWT_SECRET);
 
 // ─── Rate limiting (in-memory, per process) ───────────────────────────────────
 // Simple map: IP → { count, lockedUntil }

@@ -121,7 +121,23 @@ export async function POST(
     .where(eq(orders.id, orderId))
     .limit(1);
 
-  return NextResponse.json({ order: updatedOrder });
+  const updatedItems = await db
+    .select({
+      id: order_items.id,
+      veg_id: order_items.veg_id,
+      requested_qty: order_items.requested_qty,
+      unit: order_items.unit,
+      price_per_unit: order_items.price_per_unit,
+      line_total: order_items.line_total,
+      name_en: vegetables.name_en,
+      name_ta: vegetables.name_ta,
+      category: vegetables.category,
+    })
+    .from(order_items)
+    .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
+    .where(eq(order_items.order_id, orderId));
+
+  return NextResponse.json({ order: updatedOrder, items: updatedItems });
 }
 
 // GET /api/admin/orders/[id]/price — fetch order with items for pricing screen

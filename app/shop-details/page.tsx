@@ -75,6 +75,9 @@ export default function ShopDetailsPage() {
   const ownerName = config?.owner_name ?? "Jayaraman P";
   const phone = config?.phone_number ?? "94437 21544";
   const radius = config?.delivery_radius_km ?? 3;
+  const coveredAreas = config?.covered_areas?.length
+    ? config.covered_areas
+    : ["RS Puram", "Saibaba Colony", "Peelamedu", "Town Hall", "Gandhipuram", "Ramanathapuram"];
 
   return (
     <div className="page-content">
@@ -196,7 +199,7 @@ export default function ShopDetailsPage() {
             We deliver within a <strong>{radius} km radius</strong> of our Coimbatore store location.
           </p>
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "10px" }}>
-            {["RS Puram", "Saibaba Colony", "Peelamedu", "Town Hall", "Gandhipuram", "Ramanathapuram"].map((area) => (
+            {coveredAreas.map((area) => (
               <span
                 key={area}
                 style={{

@@ -7,6 +7,15 @@ import { headers } from "next/headers";
 const VALID_STATUSES = ["pending", "priced", "out_for_delivery", "delivered", "cancelled"] as const;
 type OrderStatus = (typeof VALID_STATUSES)[number];
 
+/** Allowed next statuses for each current status */
+const TRANSITIONS: Record<OrderStatus, ReadonlyArray<OrderStatus>> = {
+  pending: ["priced", "cancelled"],
+  priced: ["out_for_delivery", "cancelled"],
+  out_for_delivery: ["delivered", "cancelled"],
+  delivered: [],
+  cancelled: [],
+};
+
 // PATCH /api/admin/orders/[id]/status — update order status
 export async function PATCH(
   req: NextRequest,
@@ -44,6 +53,18 @@ export async function PATCH(
 
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  }
+
+  // Guard against invalid status transitions
+  const currentStatus = order.status as OrderStatus;
+  const allowedNext = TRANSITIONS[currentStatus] ?? [];
+  if (!allowedNext.includes(newStatus)) {
+    return NextResponse.json(
+      {
+        error: `Cannot transition from '${currentStatus}' to '${newStatus}'. Allowed: ${allowedNext.length ? allowedNext.join(", ") : "none (terminal state)"}`,
+      },
+      { status: 422 }
+    );
   }
 
   await db

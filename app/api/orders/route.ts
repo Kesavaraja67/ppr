@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, order_items, addresses, vegetables, users } from "@/drizzle/schema";
+import { orders, order_items, addresses, vegetables, users, shop_config } from "@/drizzle/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCustomerSession } from "@/lib/customer-auth";
+
+/** Haversine great-circle distance in km. */
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -17,7 +30,6 @@ export async function POST(req: NextRequest) {
       full_address: string;
       lat: number;
       long: number;
-      is_within_range: boolean;
     };
     items: Array<{ veg_id: string; qty: number; unit: string }>;
     name?: string;
@@ -47,12 +59,23 @@ export async function POST(req: NextRequest) {
   let addressId: string;
 
   if (body.new_address) {
-    // Validate address is within range before saving
-    if (!body.new_address.is_within_range) {
+    // Recompute delivery-zone check server-side — never trust the client value
+    const [shopConf] = await db.select().from(shop_config).limit(1);
+    const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
+    const withinRange = shopConf
+      ? haversineKm(
+          body.new_address.lat,
+          body.new_address.long,
+          Number(shopConf.lat),
+          Number(shopConf.long)
+        ) <= radiusKm
+      : false;
+
+    if (!withinRange) {
       return NextResponse.json(
         {
           error:
-            "Outside our 3km delivery zone. Please call the shop to discuss options.",
+            "Outside our delivery zone. Please call the shop to discuss options.",
         },
         { status: 422 }
       );

@@ -19,7 +19,8 @@ export async function POST(req: NextRequest) {
   const otp = body.otp?.trim() ?? "";
   const sessionId = body.sessionId?.trim() ?? "";
 
-  const cleaned = phone.replace(/\D/g, "").replace(/^91/, "");
+  const raw = phone.replace(/\D/g, "");
+  const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
   if (cleaned.length !== 10 || !otp || !sessionId) {
     return NextResponse.json(
       { error: "Phone, OTP, and session ID are required" },
@@ -33,25 +34,30 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: verifyResult.error }, { status: 401 });
   }
 
-  // Find or create user
+  // Upsert user — onConflictDoNothing prevents duplicate rows on concurrent verifications
   const phoneWithCountry = `+91${cleaned}`;
-  let [existingUser] = await db
-    .select({ id: users.id })
-    .from(users)
-    .where(eq(users.phone_number, phoneWithCountry))
-    .limit(1);
+  const [upsertedUser] = await db
+    .insert(users)
+    .values({ phone_number: phoneWithCountry })
+    .onConflictDoNothing({ target: users.phone_number })
+    .returning({ id: users.id });
 
-  if (!existingUser) {
-    const [newUser] = await db
-      .insert(users)
-      .values({ phone_number: phoneWithCountry })
-      .returning({ id: users.id });
-    existingUser = newUser;
+  // If onConflictDoNothing suppressed the insert, fetch the existing row
+  const userId = upsertedUser?.id ?? (
+    await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phone_number, phoneWithCountry))
+      .limit(1)
+  ).then((rows) => rows[0]?.id);
+
+  if (!userId) {
+    return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
   }
 
-  const token = await createCustomerSession(existingUser.id);
+  const token = await createCustomerSession(userId);
 
-  const response = NextResponse.json({ success: true, userId: existingUser.id });
+  const response = NextResponse.json({ success: true, userId });
   response.cookies.set(CUSTOMER_SESSION_COOKIE, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

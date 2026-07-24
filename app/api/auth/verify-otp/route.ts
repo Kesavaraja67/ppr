@@ -43,13 +43,15 @@ export async function POST(req: NextRequest) {
     .returning({ id: users.id });
 
   // If onConflictDoNothing suppressed the insert, fetch the existing row
-  const userId = upsertedUser?.id ?? (
-    await db
+  let userId = upsertedUser?.id;
+  if (!userId) {
+    const [existing] = await db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.phone_number, phoneWithCountry))
-      .limit(1)
-  ).then((rows) => rows[0]?.id);
+      .limit(1);
+    userId = existing?.id;
+  }
 
   if (!userId) {
     return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });

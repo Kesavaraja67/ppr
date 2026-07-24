@@ -3,10 +3,10 @@ import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
 import * as schema from "@/drizzle/schema";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error("DATABASE_URL environment variable is required");
-}
+// Fallback to placeholder during build phase so next build static page collection does not crash
+const connectionString =
+  process.env.DATABASE_URL ||
+  "postgresql://placeholder:placeholder@localhost:5432/placeholder";
 
 neonConfig.webSocketConstructor = ws;
 

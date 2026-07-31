@@ -23,7 +23,7 @@ import { eq } from "drizzle-orm";
 const client = postgres(process.env.DATABASE_URL!, { max: 1 });
 const db = drizzle(client, { schema });
 
-const INITIAL_PIN = "1234"; // ← CHANGE THIS AFTER FIRST LOGIN
+const INITIAL_PIN = "1987"; // ← CHANGE THIS AFTER FIRST LOGIN
 
 async function main() {
   console.log("⏳ Seeding database…");
@@ -59,12 +59,19 @@ async function main() {
       shop_name: "PPR Fruits & Vegetables",
       owner_name: "Jayaraman P",
       phone_number: "8870187248",
-      // Actual shop coordinates (Coimbatore)
-      lat: "11.119857",
-      long: "76.945716",
-      delivery_radius_km: "5",
+      // Actual shop coordinates — PPR Vegatable And Fruits, High School Road,
+      // NGGO Colony, Coimbatore (confirmed via Google Maps on 2026-07-31)
+      lat: "11.0915615",
+      long: "76.9452854",
+      delivery_radius_km: "3",
       free_delivery_threshold: "300",
-      covered_areas: ["Coimbatore", "Kavundampalayam", "Thudiyalur", "RS Puram", "Peelamedu"],
+      covered_areas: [
+        "Thudiyalur",
+        "Vadamadurai (K. Vadamadurai)",
+        "Sengalipalayam",
+        "Thoppampatti Pirivu",
+        "Maruthi Nagar",
+      ],
     });
     console.log("✅ Shop config created");
   } else {
@@ -79,18 +86,18 @@ async function main() {
 
   if (existingVegs.length === 0) {
     const starterVegs: Array<typeof schema.vegetables.$inferInsert> = [
-      { name_en: "Tomato", name_ta: "தக்காளி", unit: "kg", current_price: "40", image_url: "/curated/tomato.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Onion", name_ta: "வெங்காயம்", unit: "kg", current_price: "35", image_url: "/curated/onion.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Potato", name_ta: "உருளைக்கிழங்கு", unit: "kg", current_price: "30", image_url: "/curated/potato.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Carrot", name_ta: "கேரட்", unit: "kg", current_price: "50", image_url: "/curated/carrot.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Brinjal", name_ta: "கத்திரிக்காய்", unit: "kg", current_price: "45", image_url: "/curated/brinjal.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Okra", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: "60", image_url: "/curated/okra.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Cucumber", name_ta: "வெள்ளரிக்காய்", unit: "kg", current_price: "25", image_url: "/curated/cucumber.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Beetroot", name_ta: "பீட்ரூட்", unit: "kg", current_price: "40", image_url: "/curated/beetroot.png", is_curated_image: true, category: "vegetable" },
-      { name_en: "Spinach", name_ta: "பசலைக் கீரை", unit: "bunch", current_price: "15", image_url: "/curated/spinach.png", is_curated_image: true, category: "leafy" },
-      { name_en: "Coriander", name_ta: "கொத்தமல்லி", unit: "bunch", current_price: "10", image_url: "/curated/coriander.png", is_curated_image: true, category: "leafy" },
-      { name_en: "Banana", name_ta: "வாழைப்பழம்", unit: "dozen", current_price: "40", image_url: "/curated/banana.png", is_curated_image: true, category: "fruit" },
-      { name_en: "Mango", name_ta: "மாம்பழம்", unit: "kg", current_price: "80", image_url: "/curated/mango.png", is_curated_image: true, category: "fruit" },
+      { name_en: "Tomato", name_ta: "தக்காளி", unit: "kg", current_price: "40", image_url: "/curated/tomato.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Onion", name_ta: "வெங்காயம்", unit: "kg", current_price: "35", image_url: "/curated/onion.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Potato", name_ta: "உருளைக்கிழங்கு", unit: "kg", current_price: "30", image_url: "/curated/potato.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Carrot", name_ta: "கேரட்", unit: "kg", current_price: "50", image_url: "/curated/carrot.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Brinjal", name_ta: "கத்திரிக்காய்", unit: "kg", current_price: "45", image_url: "/curated/brinjal.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Okra", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: "60", image_url: "/curated/okra.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Cucumber", name_ta: "வெள்ளரிக்காய்", unit: "kg", current_price: "25", image_url: "/curated/cucumber.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Beetroot", name_ta: "பீட்ரூட்", unit: "kg", current_price: "40", image_url: "/curated/beetroot.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Spinach", name_ta: "பசலைக் கீரை", unit: "bunch", current_price: "15", image_url: "/curated/spinach.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Coriander", name_ta: "கொத்தமல்லி", unit: "bunch", current_price: "10", image_url: "/curated/coriander.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Banana", name_ta: "வாழைப்பழம்", unit: "dozen", current_price: "40", image_url: "/curated/banana.jpg", is_curated_image: true, category: "fruit" },
+      { name_en: "Mango", name_ta: "மாம்பழம்", unit: "kg", current_price: "80", image_url: "/curated/mango.jpg", is_curated_image: true, category: "fruit" },
     ];
 
     for (const veg of starterVegs) {

@@ -77,7 +77,13 @@ export default function ShopDetailsPage() {
   const radius = config?.delivery_radius_km ?? 3;
   const coveredAreas = config?.covered_areas?.length
     ? config.covered_areas
-    : ["RS Puram", "Saibaba Colony", "Peelamedu", "Town Hall", "Gandhipuram", "Ramanathapuram"];
+    : [
+        "Thudiyalur",
+        "Vadamadurai (K. Vadamadurai)",
+        "Sengalipalayam",
+        "Thoppampatti Pirivu",
+        "Maruthi Nagar",
+      ];
 
   return (
     <div className="page-content">

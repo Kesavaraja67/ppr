@@ -17,11 +17,28 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/** True when current IST time is within the 8 AM–8 PM ordering window. */
+function isWithinOrderWindow(): boolean {
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const h = nowIST.getHours();
+  return h >= 8 && h < 20;
+}
+
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // Enforce ordering hours: 8 AM–8 PM IST
+  if (!isWithinOrderWindow()) {
+    return NextResponse.json(
+      { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
+      { status: 403 }
+    );
   }
 
   let body: {

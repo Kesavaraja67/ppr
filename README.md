@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PPR Fruits & Vegetables
+
+A Next.js web app for PPR Fruits & Vegetables — a local produce shop in Coimbatore, Tamil Nadu.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to view the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copy `.env.local.example` to `.env.local` and fill in the values:
 
-## Learn More
+```env
+# Neon PostgreSQL database URL
+DATABASE_URL=postgresql://...
 
-To learn more about Next.js, take a look at the following resources:
+# JWT secrets (use strong random strings, min 32 chars)
+ADMIN_JWT_SECRET=...
+CUSTOMER_JWT_SECRET=...
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Google Gemini API (for AI-powered Tamil name suggestions and image generation)
+GEMINI_API_KEY=...
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Cron job protection secret
+CRON_SECRET=...
 
-## Deploy on Vercel
+# Firebase Phone Auth (for customer OTP login)
+# Get this from Firebase Console → Project Settings → General → Web API Key
+FIREBASE_WEB_API_KEY=...
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+# App base URL (used for internal API calls)
+NEXT_PUBLIC_BASE_URL=http://localhost:3000
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Firebase Setup
+
+1. Go to [Firebase Console](https://console.firebase.google.com/) and create a project (or use an existing one).
+2. Enable **Phone** sign-in under **Authentication → Sign-in method**.
+3. Copy the **Web API Key** from **Project Settings → General** and set it as `FIREBASE_WEB_API_KEY`.
+4. (Optional) Add test phone numbers under **Authentication → Sign-in method → Phone → Phone numbers for testing** to use without a real SIM during development.
+5. In production, Firebase will send SMS via its built-in SMS provider.
+
+## Database
+
+```bash
+npm run db:push        # Push schema to database
+npm run db:seed        # Seed initial admin + shop config + starter vegetables
+npm run db:seed-vegs   # Bulk-add full Tamil Nadu market produce list
+npm run db:studio      # Open Drizzle Studio (visual DB browser)
+```
+
+## Scripts
+
+```bash
+npm run dev            # Start development server
+npm run build          # Build for production
+npm run lint           # ESLint
+npm run type-check     # TypeScript type check
+```

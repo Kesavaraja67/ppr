@@ -25,6 +25,36 @@ interface Order {
   user_phone?: string;
 }
 
+// Builds plain text bill for WhatsApp / Web Share
+function generateTextBill(order: Order, items: OrderItem[], shopName: string) {
+  const priced = items.filter((i) => i.price_per_unit !== null);
+  const rows = priced
+    .map((i) => {
+      const name = i.name_ta ? `${i.name_en} (${i.name_ta})` : (i.name_en ?? "Item");
+      const qty = `${Number(i.requested_qty)} ${i.unit}`;
+      const rate = `₹${Number(i.price_per_unit).toFixed(2)}`;
+      const total = `₹${Number(i.line_total).toFixed(2)}`;
+      return `• ${name}\n  ${qty} × ${rate} = ${total}`;
+    })
+    .join("\n");
+
+  const subtotal = Number(order.subtotal ?? 0).toFixed(2);
+  const delivery = Number(order.delivery_charge ?? 0) === 0 ? "Free" : `₹${Number(order.delivery_charge).toFixed(2)}`;
+  const total = Number(order.total_amount ?? 0).toFixed(2);
+
+  return `🧾 *${shopName} Bill*
+📅 Delivery: ${order.delivery_date}
+────────────────────────
+${rows}
+────────────────────────
+Subtotal: ₹${subtotal}
+Delivery: ${delivery}
+*Total Amount: ₹${total}*
+
+Payment: Cash on delivery
+Thank you for ordering!`;
+}
+
 // Builds HTML bill for PDF attachment / printing
 async function generatePDFData(order: Order, items: OrderItem[], shopName: string) {
   // Build HTML string and print to PDF via browser's print dialog
@@ -82,6 +112,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [shopName, setShopName] = useState("P.P.R. Fruits and Vegetables");
   const [config, setConfig] = useState<{ veg: number; fruit: number; mixed: number; charge: number } | null>(null);
 
@@ -120,7 +151,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     for (const item of items) {
       const p = Number(prices[item.id] ?? 0);
       const lineTotal = p * Number(item.requested_qty);
-      if (item.category === "vegetable" || item.category === "leafy") vegTotal += lineTotal;
+      if (item.category === "vegetable") vegTotal += lineTotal;
       else if (item.category === "fruit") fruitTotal += lineTotal;
     }
     const subtotal = vegTotal + fruitTotal;
@@ -176,21 +207,53 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
   };
 
   const handleShare = async () => {
-    if (!order) return;
-    const html = await generatePDFData(order, items, shopName);
-    const blob = new Blob([html], { type: "text/html" });
-    const file = new File([blob], `P.P.R.-Bill-${order.delivery_date}.html`, { type: "text/html" });
+    if (!order || sharing) return;
+    setSharing(true);
 
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: `Bill - ${shopName}` });
-    } else {
-      // Fallback: download
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `P.P.R.-Bill-${order.delivery_date}.html`;
-      a.click();
-      URL.revokeObjectURL(url);
+    try {
+      const textBill = generateTextBill(order, items, shopName);
+      const html = await generatePDFData(order, items, shopName);
+      const blob = new Blob([html], { type: "text/html" });
+      const file = new File([blob], `P.P.R.-Bill-${order.delivery_date}.html`, { type: "text/html" });
+
+      let shared = false;
+
+      // 1. Try Web Share API (with files if supported, else text)
+      if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+        try {
+          const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
+          if (canShareFile) {
+            await navigator.share({
+              title: `Bill - ${shopName}`,
+              text: textBill,
+              files: [file],
+            });
+          } else {
+            await navigator.share({
+              title: `Bill - ${shopName}`,
+              text: textBill,
+            });
+          }
+          shared = true;
+        } catch (err: unknown) {
+          const shareErr = err as { name?: string };
+          if (shareErr?.name === "AbortError" || shareErr?.name === "NotAllowedError") {
+            // User manually closed or canceled the share dialog — return quietly
+            return;
+          }
+          // If file/text share failed for another reason (e.g. InvalidStateError), proceed to fallback
+        }
+      }
+
+      // 2. Fallback: open WhatsApp share with formatted text bill
+      if (!shared) {
+        const waText = encodeURIComponent(textBill);
+        window.open(`https://api.whatsapp.com/send?text=${waText}`, "_blank");
+      }
+    } catch (err) {
+      console.error("Share failed:", err);
+    } finally {
+      setSharing(false);
     }
   };
 
@@ -308,8 +371,9 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
             onClick={handleShare}
             className="btn-accent"
             style={{ flex: 1, justifyContent: "center" }}
+            disabled={sharing}
           >
-            Share Bill
+            {sharing ? "Sharing…" : "Share Bill"}
           </button>
           <button
             onClick={handlePrint}

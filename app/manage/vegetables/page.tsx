@@ -16,7 +16,6 @@ const UNITS = ["kg", "g", "bunch", "piece", "dozen", "bag"];
 const CATEGORIES = [
   { value: "vegetable", label: "Vegetable" },
   { value: "fruit", label: "Fruit" },
-  { value: "leafy", label: "Leafy Green" },
 ];
 
 function LeafIcon({ color = "#166534" }: { color?: string }) {

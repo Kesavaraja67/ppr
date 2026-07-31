@@ -31,6 +31,15 @@ export default function ConfirmOrderPage() {
   const [shopCoords, setShopCoords] = useState<{ lat: number; long: number; radius: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [shopOpen, setShopOpen] = useState(true);
+
+  function isWithinOrderWindow(): boolean {
+    const nowIST = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const h = nowIST.getHours();
+    return h >= 8 && h < 20;
+  }
 
   // Auth check on mount — redirect to /login if not signed in
   useEffect(() => {
@@ -43,6 +52,13 @@ export default function ConfirmOrderPage() {
         if (d.name) setCustomerName(d.name);
       })
       .catch(() => setAuthChecked(true));
+  }, []);
+
+  // Shop hours — recalculate every minute
+  useEffect(() => {
+    setShopOpen(isWithinOrderWindow());
+    const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
+    return () => clearInterval(id);
   }, []);
 
   // Load shop config for haversine validation
@@ -105,6 +121,12 @@ export default function ConfirmOrderPage() {
     // Validate name
     if (!customerName.trim()) {
       setSubmitError("Please enter your name before placing the order.");
+      return;
+    }
+
+    // Block if outside ordering hours
+    if (!isWithinOrderWindow()) {
+      setSubmitError("Orders are accepted between 8 AM and 8 PM. Please try again during shop hours.");
       return;
     }
 
@@ -254,6 +276,49 @@ export default function ConfirmOrderPage() {
     );
   }
 
+  // Outside ordering hours gate
+  if (!shopOpen) {
+    return (
+      <div
+        style={{
+          minHeight: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "32px 24px",
+          textAlign: "center",
+          background: "var(--bg)",
+        }}
+      >
+        <div
+          style={{
+            width: "64px",
+            height: "64px",
+            borderRadius: "9999px",
+            background: "#FFF7ED",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginBottom: "20px",
+            fontSize: "1.8rem",
+          }}
+        >
+          🕗
+        </div>
+        <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "10px", color: "#92400E" }}>
+          Shop is closed for now
+        </h1>
+        <p style={{ color: "#B45309", fontSize: "0.88rem", maxWidth: "280px", lineHeight: 1.6, marginBottom: "28px" }}>
+          Orders are accepted between <strong>8 AM and 8 PM</strong>. Please come back during shop hours.
+        </p>
+        <Link href="/" className="btn-accent" style={{ display: "inline-flex", minWidth: "200px", justifyContent: "center" }}>
+          Browse catalog
+        </Link>
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div style={{ padding: "40px 24px", textAlign: "center" }}>
@@ -346,7 +411,10 @@ export default function ConfirmOrderPage() {
               {/* Qty controls */}
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <button
-                  onClick={() => setQty(item.veg_id, item.qty - 1)}
+                  onClick={() => {
+                    const step = item.unit === "kg" ? 0.5 : 1;
+                    setQty(item.veg_id, parseFloat(Math.max(0, item.qty - step).toFixed(1)));
+                  }}
                   style={{
                     width: "32px",
                     height: "32px",
@@ -362,18 +430,19 @@ export default function ConfirmOrderPage() {
                 >
                   −
                 </button>
-                <span style={{ fontWeight: 700, minWidth: "20px", textAlign: "center" }}>
-                  {item.qty}
+                <span style={{ fontWeight: 700, minWidth: "32px", textAlign: "center", fontSize: "0.9rem" }}>
+                  {item.qty % 1 === 0 ? item.qty : item.qty.toFixed(1)}
                 </span>
                 <button
-                  onClick={() =>
-                    setQty(item.veg_id, item.qty + 1, {
+                  onClick={() => {
+                    const step = item.unit === "kg" ? 0.5 : 1;
+                    setQty(item.veg_id, parseFloat((item.qty + step).toFixed(1)), {
                       name_en: item.name_en,
                       name_ta: item.name_ta,
                       unit: item.unit,
                       image_url: item.image_url,
-                    })
-                  }
+                    });
+                  }}
                   style={{
                     width: "32px",
                     height: "32px",

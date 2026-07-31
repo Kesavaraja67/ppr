@@ -16,6 +16,14 @@ export async function GET() {
     lat: config.lat,
     long: config.long,
     delivery_radius_km: config.delivery_radius_km,
-    covered_areas: config.covered_areas ?? [],
+    covered_areas: config.covered_areas?.length
+      ? config.covered_areas
+      : [
+          "Thudiyalur",
+          "Vadamadurai (K. Vadamadurai)",
+          "Sengalipalayam",
+          "Thoppampatti Pirivu",
+          "Maruthi Nagar",
+        ],
   });
 }

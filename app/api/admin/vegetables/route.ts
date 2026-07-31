@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     name_en: string;
     name_ta?: string; // optional — auto-filled from dict if not provided
     unit: string;
-    category: "vegetable" | "fruit" | "leafy";
+    category: "vegetable" | "fruit";
     image_data_url?: string; // base64 JPEG resized client-side, ~30-50KB
   };
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ALLOWED_CATEGORIES = ["vegetable", "fruit", "leafy"];
+  const ALLOWED_CATEGORIES = ["vegetable", "fruit"];
   if (!ALLOWED_CATEGORIES.includes(body.category)) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
@@ -96,7 +96,7 @@ export async function PATCH(req: NextRequest) {
     name_en?: string;
     name_ta?: string;
     unit?: string;
-    category?: "vegetable" | "fruit" | "leafy";
+    category?: "vegetable" | "fruit";
     image_data_url?: string;
     in_stock?: boolean;
   };
@@ -111,7 +111,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  if (body.category !== undefined && !["vegetable", "fruit", "leafy"].includes(body.category)) {
+  if (body.category !== undefined && !["vegetable", "fruit"].includes(body.category)) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 

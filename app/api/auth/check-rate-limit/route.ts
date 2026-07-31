@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkOTPRateLimit, sendOTP } from "@/lib/otp";
+import { checkOTPRateLimit } from "@/lib/otp";
 
+/**
+ * Pre-flight rate-limit check — called by the login page BEFORE the browser
+ * triggers Firebase's RecaptchaVerifier + signInWithPhoneNumber.
+ *
+ * This preserves server-side abuse protection without the server needing to
+ * initiate the SMS send.
+ *
+ * POST { phone: "9876543210" }
+ * → 200 { allowed: true }
+ * → 429 { error: "Too many OTP requests…", limitedBy: "phone" | "ip" }
+ */
 export async function POST(req: NextRequest) {
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -24,23 +35,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Rate limit: max 3 OTP requests per phone + per IP per 10-minute window
   const rateCheck = checkOTPRateLimit(cleaned, ip);
   if (!rateCheck.allowed) {
     return NextResponse.json(
       {
-        error:
-          "Too many OTP requests. Please wait 10 minutes before trying again.",
+        error: "Too many OTP requests. Please wait 10 minutes before trying again.",
         limitedBy: rateCheck.limitedBy,
       },
       { status: 429 }
     );
   }
 
-  const result = await sendOTP(cleaned);
-  if (!result.success) {
-    return NextResponse.json({ error: result.error }, { status: 502 });
-  }
-
-  return NextResponse.json({ sessionId: result.sessionId });
+  return NextResponse.json({ allowed: true });
 }

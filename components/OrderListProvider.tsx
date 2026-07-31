@@ -25,30 +25,32 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<OrderItem[]>(() => {
-    if (typeof window === "undefined") return [];
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [mounted, setMounted] = useState(false);
+
+  // Read from sessionStorage after client mount (prevents SSR hydration mismatch)
+  useEffect(() => {
+    setMounted(true);
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setItems(parsed);
+      }
     } catch {
-      return [];
+      // ignore
     }
-  });
+  }, []);
 
-  const isMounted = useRef(false);
-
-  // Persist to sessionStorage on changes after initial mount
+  // Persist to sessionStorage on item state changes after mount
   useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      return;
-    }
+    if (!mounted) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       // ignore
     }
-  }, [items]);
+  }, [items, mounted]);
 
   const setQty = useCallback(
     (
@@ -90,7 +92,7 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const totalCount = items.reduce((sum, i) => sum + i.qty, 0);
+  const totalCount = items.length;
 
   return (
     <OrderListContext.Provider

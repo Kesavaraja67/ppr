@@ -2,10 +2,24 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { OrderListProvider } from "@/components/OrderListProvider";
 
+function getMetadataBase(): URL {
+  const envUrl = process.env.NEXT_PUBLIC_BASE_URL?.trim();
+  if (envUrl) {
+    try {
+      const formatted =
+        envUrl.startsWith("http://") || envUrl.startsWith("https://")
+          ? envUrl
+          : `https://${envUrl}`;
+      return new URL(formatted);
+    } catch {
+      // Fallback on parse failure
+    }
+  }
+  return new URL("https://ppr-fruits-and-vegetables.vercel.app");
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(
-    process.env.NEXT_PUBLIC_BASE_URL ?? "https://ppr-fruits-and-vegetables.vercel.app"
-  ),
+  metadataBase: getMetadataBase(),
   title: "P.P.R. Fruits and Vegetables — Fresh Daily, Coimbatore",
   description:
     "Order fresh vegetables and fruits from P.P.R. Fruits and Vegetables in Coimbatore. Browse the catalog and pre-book next-day delivery.",

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 
 export interface OrderItem {
   veg_id: string;
@@ -25,27 +25,25 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<OrderItem[]>([]);
-  // useRef instead of useState so we don't trigger a re-render on mount
-  const mountedRef = useRef(false);
-
-  // Read from sessionStorage after client mount (prevents SSR hydration mismatch)
-  useEffect(() => {
-    mountedRef.current = true;
+  // Lazy initializer reads from sessionStorage once at mount — avoids setState-in-effect
+  // and hydration mismatch (window is only available client-side, which is safe here
+  // because this component is always rendered inside a "use client" boundary).
+  const [items, setItems] = useState<OrderItem[]>(() => {
+    if (typeof window === "undefined") return [];
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setItems(parsed);
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
-      // ignore
+      // ignore corrupt storage
     }
-  }, []);
+    return [];
+  });
 
-  // Persist to sessionStorage on item state changes after mount
+  // Persist to sessionStorage whenever the order list changes
   useEffect(() => {
-    if (!mountedRef.current) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {

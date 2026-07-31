@@ -123,10 +123,16 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleaned, idToken }),
       });
-      const data = await res.json();
+
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // Non-JSON response (e.g. 500 HTML error page)
+      }
 
       if (!res.ok) {
-        setError(data.error ?? "Verification failed. Please try again.");
+        setError(data.error ?? "Verification failed. Please check server configuration.");
         return;
       }
 

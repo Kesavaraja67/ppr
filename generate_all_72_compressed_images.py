@@ -1,7 +1,11 @@
 import os
+import sys
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 
-curated_dir = r"f:\free-lancing\ppr-fruits-and-vegetables\public\curated"
+# Derive the curated directory portably from this script's location so the
+# script works on any machine / OS without hardcoded absolute paths.
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+curated_dir = os.path.join(_script_dir, "public", "curated")
 os.makedirs(curated_dir, exist_ok=True)
 
 # Define color schemes and studio product photo composition params per item category
@@ -87,8 +91,13 @@ print(f"Creating product photo assets for {len(ITEMS)} items...")
 
 for slug, primary_color, bg_color, label in ITEMS:
     out_path = os.path.join(curated_dir, f"{slug}.jpg")
-    
-    # Check if a high-res AI generated image already exists in curated_dir for this slug
+
+    # Skip if a sufficiently large real JPG already exists (e.g., AI-generated photo)
+    if os.path.exists(out_path) and os.path.getsize(out_path) >= 4000:
+        print(f"  [SKIP] {slug}.jpg already exists ({os.path.getsize(out_path)/1024:.1f} KB)")
+        continue
+
+    # Check if a high-res AI generated PNG already exists for this slug
     existing_photo = os.path.join(curated_dir, f"{slug}.png")
     if os.path.exists(existing_photo):
         img = Image.open(existing_photo).convert('RGB')

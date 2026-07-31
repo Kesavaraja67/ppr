@@ -1,7 +1,7 @@
 /**
  * Firebase Admin SDK — server-only singleton.
  *
- * Exports `adminAuth` for verifying Firebase ID tokens issued by the
+ * Exports `getAdminAuth()` for verifying Firebase ID tokens issued by the
  * client-side Phone Auth flow.
  *
  * Required env vars (server-only — never expose to browser):
@@ -11,6 +11,10 @@
  *
  * Obtain by: Firebase Console → Project Settings → Service accounts →
  *            Generate new private key.
+ *
+ * The singleton is initialised lazily via `getAdminAuth()` so that missing
+ * credentials throw at request time (inside the handler) rather than at
+ * module import / build time.
  */
 
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
@@ -36,4 +40,12 @@ function getAdminApp(): App {
   });
 }
 
-export const adminAuth: Auth = getAuth(getAdminApp());
+let _adminAuth: Auth | null = null;
+
+/** Returns the singleton Admin Auth instance, initialising it on first call. */
+export function getAdminAuth(): Auth {
+  if (!_adminAuth) {
+    _adminAuth = getAuth(getAdminApp());
+  }
+  return _adminAuth;
+}

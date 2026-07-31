@@ -63,7 +63,7 @@ async function main() {
       // NGGO Colony, Coimbatore (confirmed via Google Maps on 2026-07-31)
       lat: "11.0915615",
       long: "76.9452854",
-      delivery_radius_km: "3",
+      delivery_radius_km: "5",
       free_delivery_threshold: "300",
       covered_areas: [
         "Thudiyalur",
@@ -91,7 +91,7 @@ async function main() {
       { name_en: "Potato", name_ta: "உருளைக்கிழங்கு", unit: "kg", current_price: "30", image_url: "/curated/potato.jpg", is_curated_image: true, category: "vegetable" },
       { name_en: "Carrot", name_ta: "கேரட்", unit: "kg", current_price: "50", image_url: "/curated/carrot.jpg", is_curated_image: true, category: "vegetable" },
       { name_en: "Brinjal", name_ta: "கத்திரிக்காய்", unit: "kg", current_price: "45", image_url: "/curated/brinjal.jpg", is_curated_image: true, category: "vegetable" },
-      { name_en: "Okra", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: "60", image_url: "/curated/okra.jpg", is_curated_image: true, category: "vegetable" },
+      { name_en: "Ladies Finger", name_ta: "வெண்டைக்காய்", unit: "kg", current_price: "60", image_url: "/curated/ladies_finger.jpg", is_curated_image: true, category: "vegetable" },
       { name_en: "Cucumber", name_ta: "வெள்ளரிக்காய்", unit: "kg", current_price: "25", image_url: "/curated/cucumber.jpg", is_curated_image: true, category: "vegetable" },
       { name_en: "Beetroot", name_ta: "பீட்ரூட்", unit: "kg", current_price: "40", image_url: "/curated/beetroot.jpg", is_curated_image: true, category: "vegetable" },
       { name_en: "Spinach", name_ta: "பசலைக் கீரை", unit: "bunch", current_price: "15", image_url: "/curated/spinach.jpg", is_curated_image: true, category: "vegetable" },

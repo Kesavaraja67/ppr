@@ -31,7 +31,7 @@ export default function ConfirmOrderPage() {
   const [shopCoords, setShopCoords] = useState<{ lat: number; long: number; radius: number } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
-  const [shopOpen, setShopOpen] = useState(true);
+  const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
 
   function isWithinOrderWindow(): boolean {
     const nowIST = new Date(
@@ -56,7 +56,6 @@ export default function ConfirmOrderPage() {
 
   // Shop hours — recalculate every minute
   useEffect(() => {
-    setShopOpen(isWithinOrderWindow());
     const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
     return () => clearInterval(id);
   }, []);
@@ -130,10 +129,11 @@ export default function ConfirmOrderPage() {
       return;
     }
 
-    // Validate quantities
+    // Validate quantities — kg items allow 0.5 minimum, others require at least 1
     for (const item of items) {
-      if (item.qty < 1) {
-        setSubmitError(`Minimum 1 unit required for ${item.name_en}`);
+      const minQty = item.unit === "kg" ? 0.5 : 1;
+      if (item.qty < minQty) {
+        setSubmitError(`Minimum ${minQty} ${item.unit} required for ${item.name_en}`);
         return;
       }
     }
@@ -413,7 +413,8 @@ export default function ConfirmOrderPage() {
                 <button
                   onClick={() => {
                     const step = item.unit === "kg" ? 0.5 : 1;
-                    setQty(item.veg_id, parseFloat(Math.max(0, item.qty - step).toFixed(1)));
+                    const minQty = item.unit === "kg" ? 0.5 : 1;
+                    setQty(item.veg_id, parseFloat(Math.max(minQty, item.qty - step).toFixed(1)));
                   }}
                   style={{
                     width: "32px",

@@ -1,8 +1,8 @@
 /**
  * Firebase Client SDK — browser-safe singleton.
  *
- * Exports `auth` for use in client components (RecaptchaVerifier,
- * signInWithPhoneNumber, etc.).
+ * Always use the lazy accessor `getFirebaseAuth()` in client components
+ * (RecaptchaVerifier, signInWithPhoneNumber, signOut, etc.).
  *
  * Env vars (must have NEXT_PUBLIC_ prefix to reach the browser):
  *   NEXT_PUBLIC_FIREBASE_API_KEY
@@ -36,14 +36,3 @@ export function getFirebaseAuth(): Auth {
   }
   return _auth;
 }
-
-// Convenience re-export for callers that simply `import { auth }`.
-// This eagerly resolves the singleton — only safe inside "use client" modules.
-export const auth: Auth = (() => {
-  if (typeof window === "undefined") {
-    // SSR guard — return a stub; this branch is never reached in practice
-    // because only client components import this file.
-    return {} as Auth;
-  }
-  return getFirebaseAuth();
-})();

@@ -62,11 +62,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Validate each item has qty >= 1
+  // Validate each item — kg items may be 0.5 minimum, other units require >= 1
   for (const item of body.items) {
-    if (item.qty < 1) {
+    const minQty = item.unit === "kg" ? 0.5 : 1;
+    if (item.qty < minQty) {
       return NextResponse.json(
-        { error: `Minimum quantity is 1 unit per item` },
+        { error: `Minimum quantity is ${minQty} ${item.unit} per item` },
         { status: 400 }
       );
     }

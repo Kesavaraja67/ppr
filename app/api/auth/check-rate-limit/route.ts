@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { checkOTPRateLimit } from "@/lib/otp";
+import { checkOTPRateLimit, normalizeIndianMobile } from "@/lib/otp";
 
 /**
  * Pre-flight rate-limit check — called by the login page BEFORE the browser
  * triggers Firebase's RecaptchaVerifier + signInWithPhoneNumber.
  *
- * This preserves server-side abuse protection without the server needing to
- * initiate the SMS send.
+ * This preserves a best-effort server-side abuse guard without the server
+ * initiating the SMS send. The primary SMS enforcement controls are Firebase
+ * App Check, SMS region policy, and per-phone quotas configured in the
+ * Firebase Console.
  *
  * POST { phone: "9876543210" }
  * → 200 { allowed: true }
@@ -25,8 +27,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const phone = body.phone?.trim() ?? "";
-  const cleaned = phone.replace(/\D/g, "").replace(/^91/, "");
+  const cleaned = normalizeIndianMobile(body.phone?.trim() ?? "");
 
   if (cleaned.length !== 10) {
     return NextResponse.json(

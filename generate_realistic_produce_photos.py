@@ -2,8 +2,12 @@ import os, glob
 from PIL import Image, ImageDraw, ImageFilter, ImageEnhance
 import math, random
 
-curated_dir = r"f:\free-lancing\ppr-fruits-and-vegetables\public\curated"
-brain_dir = r"C:\Users\pc\.gemini\antigravity-ide\brain\62f22b51-b55c-485b-aefd-2945dbb907da"
+# Portable paths derived from this script's location.
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+curated_dir = os.path.join(_script_dir, "public", "curated")
+# brain_dir holds AI-generated source PNGs — adjust this path if running on another machine.
+brain_dir = os.path.join(os.path.expanduser("~"), ".gemini", "antigravity-ide", "brain",
+                         "62f22b51-b55c-485b-aefd-2945dbb907da")
 
 os.makedirs(curated_dir, exist_ok=True)
 

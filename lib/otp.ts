@@ -1,18 +1,41 @@
 /**
- * OTP rate limiting.
+ * OTP utilities — shared normalisation + best-effort rate limiting.
  *
- * The actual OTP send/verify flow now happens client-side via the Firebase
+ * The actual OTP send/verify flow happens client-side via the Firebase
  * client SDK (RecaptchaVerifier + signInWithPhoneNumber + confirmationResult.confirm).
- * This module only provides the server-side rate limit guard, called from
- * POST /api/auth/check-rate-limit before the browser triggers Firebase.
+ * Firebase itself enforces SMS abuse through App Check, per-phone quotas,
+ * and console-level SMS region policies — those are the primary enforcement
+ * controls.
+ *
+ * This module provides:
+ *  1. `normalizeIndianMobile(input)` — shared phone-number normaliser.
+ *  2. `checkOTPRateLimit(phone, ip)` — a best-effort pre-flight guard that
+ *     prevents a well-intentioned user from spamming the Firebase trigger
+ *     from the app's own login UI. Because it uses in-process Maps, it resets
+ *     per serverless instance and is NOT a security boundary on its own.
  *
  * Rate limit: max 3 OTP requests per phone number AND per IP per 10-minute window.
- * This is a non-negotiable safeguard against SMS credit abuse.
  */
 
+// ─── Shared normaliser ────────────────────────────────────────────────────────
+/**
+ * Strips non-digits and removes the Indian country code (91) only when the
+ * input is exactly 12 digits and starts with "91".
+ *
+ * Examples:
+ *   "9876543210"    → "9876543210"   (10-digit, no country code)
+ *   "+919876543210" → "9876543210"   (12 digits after stripping non-digits)
+ *   "919876543210"  → "9876543210"   (12 digits starting with 91)
+ *   "9198765432"    → "9198765432"   (10 digits starting with 91 — not stripped)
+ */
+export function normalizeIndianMobile(input: string): string {
+  const raw = input.replace(/\D/g, "");
+  return raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+}
+
 // ─── Rate limiting ────────────────────────────────────────────────────────────
-// In-memory per-process. Serverless resets are acceptable here — the window
-// is short (10 min) and a reset just means a fresh window, not a security hole.
+// In-process Maps. A serverless reset starts a fresh window — that is
+// acceptable here because Firebase quotas are the real enforcement layer.
 const MAX_OTP_REQUESTS = 3;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 

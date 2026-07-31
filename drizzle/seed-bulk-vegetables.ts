@@ -15,7 +15,6 @@ config({ path: ".env.local" });
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
-import { eq } from "drizzle-orm";
 
 import fs from "fs";
 import path from "path";
@@ -48,7 +47,8 @@ const PRODUCE: VegRow[] = [
   { name_en: "Marrow",               name_ta: "மேர்க்கா",                    unit: "kg",     category: "vegetable" },
   { name_en: "Chow Chow",            name_ta: "சவுசவு",                      unit: "kg",     category: "vegetable" },
   { name_en: "Knol Khol",            name_ta: "நூல்கூள்",                    unit: "kg",     category: "vegetable" },
-  { name_en: "Ladies Finger",        name_ta: "வெண்டைக்கா",                  unit: "kg",     category: "vegetable" },
+  // Ladies Finger is seeded by drizzle/seed.ts — the bulk seed deduplicates via
+  // onConflictDoNothing so this comment serves as a reminder. Do NOT re-add it here.
   { name_en: "Broad Beans",          name_ta: "அவரைக்கா",                    unit: "kg",     category: "vegetable" },
   { name_en: "Cluster Beans",        name_ta: "கொத்தவரைக்கா",               unit: "kg",     category: "vegetable" },
   { name_en: "Hyacinth Beans",       name_ta: "கொடியவரை",                    unit: "kg",     category: "vegetable" },
@@ -121,19 +121,6 @@ async function main() {
   let skipped = 0;
 
   for (const item of PRODUCE) {
-    // Check if this name_en already exists
-    const existing = await db
-      .select({ id: schema.vegetables.id })
-      .from(schema.vegetables)
-      .where(eq(schema.vegetables.name_en, item.name_en))
-      .limit(1);
-
-    if (existing.length > 0) {
-      console.log(`  ⏭  Skipping "${item.name_en}" — already exists`);
-      skipped++;
-      continue;
-    }
-
     const slug = item.name_en.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
     const jpgPath = path.join(process.cwd(), "public", "curated", `${slug}.jpg`);
     const pngPath = path.join(process.cwd(), "public", "curated", `${slug}.png`);
@@ -145,19 +132,28 @@ async function main() {
       imageUrl = `/curated/${slug}.png`;
     }
 
-    await db.insert(schema.vegetables).values({
-      name_en:        item.name_en,
-      name_ta:        item.name_ta,
-      unit:           item.unit,
-      category:       item.category,
-      current_price:  "0",       // Admin sets price via the stock management panel
-      image_url:      imageUrl,
-      is_curated_image: !!imageUrl,
-      in_stock:       true,
-    });
+    const inserted = await db
+      .insert(schema.vegetables)
+      .values({
+        name_en:          item.name_en,
+        name_ta:          item.name_ta,
+        unit:             item.unit,
+        category:         item.category,
+        current_price:    "0",   // Admin sets price via stock management panel
+        image_url:        imageUrl,
+        is_curated_image: !!imageUrl,
+        in_stock:         true,
+      })
+      .onConflictDoNothing({ target: schema.vegetables.name_en })
+      .returning({ id: schema.vegetables.id });
 
-    console.log(`  ✅ Added "${item.name_en}" (${item.name_ta})`);
-    added++;
+    if (inserted.length > 0) {
+      console.log(`  ✅ Added "${item.name_en}" (${item.name_ta})`);
+      added++;
+    } else {
+      console.log(`  ⏭  Skipping "${item.name_en}" — already exists`);
+      skipped++;
+    }
   }
 
   console.log(`\n✅ Done — ${added} added, ${skipped} skipped (already existed)`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 interface OrderItem {
@@ -113,6 +113,8 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [sharing, setSharing] = useState(false);
+  // Ref guard prevents a second share() call from firing before React state updates
+  const sharingRef = useRef(false);
   const [shopName, setShopName] = useState("P.P.R. Fruits and Vegetables");
   const [config, setConfig] = useState<{ veg: number; fruit: number; mixed: number; charge: number } | null>(null);
 
@@ -207,7 +209,8 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
   };
 
   const handleShare = async () => {
-    if (!order || sharing) return;
+    if (!order || sharingRef.current) return;
+    sharingRef.current = true;
     setSharing(true);
 
     try {
@@ -238,10 +241,14 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         } catch (err: unknown) {
           const shareErr = err as { name?: string };
           if (shareErr?.name === "AbortError" || shareErr?.name === "NotAllowedError") {
-            // User manually closed or canceled the share dialog — return quietly
+            // User cancelled the share dialog — return quietly, skip WhatsApp fallback
             return;
           }
-          // If file/text share failed for another reason (e.g. InvalidStateError), proceed to fallback
+          if (shareErr?.name === "InvalidStateError") {
+            // A previous share is still open (shouldn't happen with the ref guard, but be safe)
+            return;
+          }
+          // Other errors fall through to WhatsApp fallback
         }
       }
 
@@ -253,6 +260,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     } catch (err) {
       console.error("Share failed:", err);
     } finally {
+      sharingRef.current = false;
       setSharing(false);
     }
   };

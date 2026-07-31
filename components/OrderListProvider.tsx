@@ -26,11 +26,12 @@ const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<OrderItem[]>([]);
-  const [mounted, setMounted] = useState(false);
+  // useRef instead of useState so we don't trigger a re-render on mount
+  const mountedRef = useRef(false);
 
   // Read from sessionStorage after client mount (prevents SSR hydration mismatch)
   useEffect(() => {
-    setMounted(true);
+    mountedRef.current = true;
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
       if (stored) {
@@ -44,13 +45,13 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
 
   // Persist to sessionStorage on item state changes after mount
   useEffect(() => {
-    if (!mounted) return;
+    if (!mountedRef.current) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       // ignore
     }
-  }, [items, mounted]);
+  }, [items]);
 
   const setQty = useCallback(
     (

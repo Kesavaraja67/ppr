@@ -1,11 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { getAdminAuth } from "@/lib/firebase-admin";
+import { normalizeIndianMobile } from "@/lib/otp";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
 
 const SESSION_DURATION_DAYS = 75;
+
+// ID tokens must be issued within the last 5 minutes to be accepted.
+// This prevents replay attacks using tokens captured from old sign-in events.
+const MAX_AUTH_AGE_SECONDS = 5 * 60;
 
 /**
  * POST /api/auth/verify-otp
@@ -14,10 +19,11 @@ const SESSION_DURATION_DAYS = 75;
  *
  * Flow:
  *  1. Validate phone format.
- *  2. Verify the Firebase ID token with the Admin SDK.
- *  3. Assert the token's phone_number matches the submitted phone.
- *  4. Upsert the user row (first-time login creates the account).
- *  5. Issue a session cookie.
+ *  2. Verify the Firebase ID token with the Admin SDK (revocation checked).
+ *  3. Reject tokens older than 5 minutes.
+ *  4. Assert the token's phone_number matches the submitted phone.
+ *  5. Upsert the user row (first-time login creates the account).
+ *  6. Issue a session cookie.
  */
 export async function POST(req: NextRequest) {
   let body: { phone?: string; idToken?: string };
@@ -30,8 +36,7 @@ export async function POST(req: NextRequest) {
   const phone = body.phone?.trim() ?? "";
   const idToken = body.idToken?.trim() ?? "";
 
-  const raw = phone.replace(/\D/g, "");
-  const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+  const cleaned = normalizeIndianMobile(phone);
 
   if (cleaned.length !== 10) {
     return NextResponse.json(
@@ -47,10 +52,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 1. Verify Firebase ID token ───────────────────────────────────────────
-  let decodedToken: Awaited<ReturnType<typeof adminAuth.verifyIdToken>>;
+  // ── 1. Verify Firebase ID token (with revocation check) ───────────────────
+  let decodedToken: Awaited<ReturnType<ReturnType<typeof getAdminAuth>["verifyIdToken"]>>;
   try {
-    decodedToken = await adminAuth.verifyIdToken(idToken);
+    decodedToken = await getAdminAuth().verifyIdToken(idToken, /* checkRevoked= */ true);
   } catch (err) {
     console.error("Firebase verifyIdToken error:", err);
     return NextResponse.json(
@@ -59,19 +64,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // ── 2. Assert phone number matches ────────────────────────────────────────
+  // ── 2. Reject stale tokens (older than 5 minutes) ─────────────────────────
+  const authAge = Math.floor(Date.now() / 1000) - (decodedToken.auth_time ?? 0);
+  if (authAge > MAX_AUTH_AGE_SECONDS) {
+    return NextResponse.json(
+      { error: "Verification token has expired. Please request a new OTP." },
+      { status: 401 }
+    );
+  }
+
+  // ── 3. Assert phone number matches ────────────────────────────────────────
   const expectedPhone = `+91${cleaned}`;
   if (decodedToken.phone_number !== expectedPhone) {
-    console.error(
-      `Phone mismatch: token has ${decodedToken.phone_number}, expected ${expectedPhone}`
-    );
+    // Log a generic mismatch without exposing PII (phone numbers)
+    console.error("Phone mismatch between token and submitted phone number");
     return NextResponse.json(
       { error: "Phone number mismatch. Please try again." },
       { status: 401 }
     );
   }
 
-  // ── 3. Upsert user ────────────────────────────────────────────────────────
+  // ── 4. Upsert user ────────────────────────────────────────────────────────
   const [upsertedUser] = await db
     .insert(users)
     .values({ phone_number: expectedPhone })
@@ -92,7 +105,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
   }
 
-  // ── 4. Issue session cookie ───────────────────────────────────────────────
+  // ── 5. Issue session cookie ───────────────────────────────────────────────
   const token = await createCustomerSession(userId);
 
   const response = NextResponse.json({ success: true, userId });

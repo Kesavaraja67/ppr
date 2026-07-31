@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from "firebase/auth";
+import { RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from "firebase/auth";
 import { getFirebaseAuth } from "@/lib/firebase-client";
+import { normalizeIndianMobile } from "@/lib/otp";
 
 function LoginForm() {
   const router = useRouter();
@@ -30,8 +31,7 @@ function LoginForm() {
   }, []);
 
   const handleSendOtp = async () => {
-    const raw = phone.replace(/\D/g, "");
-    const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+    const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
@@ -115,8 +115,7 @@ function LoginForm() {
       const userCredential = await confirmationRef.current.confirm(code);
       const idToken = await userCredential.user.getIdToken();
 
-      const raw = phone.replace(/\D/g, "");
-      const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+      const cleaned = normalizeIndianMobile(phone);
 
       // ── Step 5: Server verifies ID token → issues session cookie ─────────
       const res = await fetch("/api/auth/verify-otp", {
@@ -130,6 +129,9 @@ function LoginForm() {
         setError(data.error ?? "Verification failed. Please try again.");
         return;
       }
+
+      // Drop the Firebase client session — the server cookie is the source of truth.
+      await signOut(getFirebaseAuth()).catch(() => {});
 
       router.replace(nextUrl);
     } catch (err: unknown) {
@@ -169,7 +171,7 @@ function LoginForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const cleanedPhone = phone.replace(/\D/g, "").replace(/^91/, "");
+  const cleanedPhone = normalizeIndianMobile(phone);
 
   return (
     <div

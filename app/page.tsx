@@ -57,7 +57,10 @@ export default async function CatalogPage() {
               lat: Number(config.lat),
               long: Number(config.long),
               delivery_radius_km: Number(config.delivery_radius_km),
-              covered_areas: DEFAULT_COVERED_AREAS,
+              covered_areas:
+                Array.isArray(config.covered_areas) && config.covered_areas.length > 0
+                  ? (config.covered_areas as string[])
+                  : DEFAULT_COVERED_AREAS,
             }
           : {
               shop_name: "P.P.R. Fruits & Vegetables",

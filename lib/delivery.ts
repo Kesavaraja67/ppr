@@ -17,7 +17,7 @@ export interface DeliveryConfig {
 }
 
 export interface OrderLineCategorized {
-  category: "vegetable" | "fruit" | "leafy"; // leafy treated as vegetable for threshold logic
+  category: "vegetable" | "fruit";
   line_total: number;
 }
 
@@ -35,9 +35,8 @@ export function computeDeliveryCharge(
   lines: OrderLineCategorized[],
   config: DeliveryConfig
 ): DeliveryResult {
-  // Leafy greens are treated as vegetables for delivery threshold logic
   const vegetable_total = lines
-    .filter((l) => l.category === "vegetable" || l.category === "leafy")
+    .filter((l) => l.category === "vegetable")
     .reduce((sum, l) => sum + l.line_total, 0);
 
   const fruit_total = lines

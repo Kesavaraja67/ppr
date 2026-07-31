@@ -17,11 +17,28 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/** True when current IST time is within the 8 AM–8 PM ordering window. */
+function isWithinOrderWindow(): boolean {
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const h = nowIST.getHours();
+  return h >= 8 && h < 20;
+}
+
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // Enforce ordering hours: 8 AM–8 PM IST
+  if (!isWithinOrderWindow()) {
+    return NextResponse.json(
+      { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
+      { status: 403 }
+    );
   }
 
   let body: {
@@ -45,11 +62,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Validate each item has qty >= 1
+  // Validate each item — kg items may be 0.5 minimum, other units require >= 1
   for (const item of body.items) {
-    if (item.qty < 1) {
+    const minQty = item.unit === "kg" ? 0.5 : 1;
+    if (item.qty < minQty) {
       return NextResponse.json(
-        { error: `Minimum quantity is 1 unit per item` },
+        { error: `Minimum quantity is ${minQty} ${item.unit} per item` },
         { status: 400 }
       );
     }

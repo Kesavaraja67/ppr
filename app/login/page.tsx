@@ -4,6 +4,9 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import { RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
+import { normalizeIndianMobile } from "@/lib/otp";
 
 function LoginForm() {
   const router = useRouter();
@@ -12,16 +15,23 @@ function LoginForm() {
 
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
   const otpInputRef = useRef<HTMLInputElement>(null);
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+
+  // Clean up the RecaptchaVerifier when the component unmounts
+  useEffect(() => {
+    return () => {
+      recaptchaVerifierRef.current?.clear();
+    };
+  }, []);
 
   const handleSendOtp = async () => {
-    // Strip country code only when user types full +91 / 91 prefix
-    const raw = phone.replace(/\D/g, "");
-    const cleaned = raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+    const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
@@ -31,23 +41,54 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/send-otp", {
+      // ── Step 1: Server-side rate-limit pre-flight ─────────────────────────
+      const rateRes = await fetch("/api/auth/check-rate-limit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleaned }),
       });
-      const data = await res.json();
 
-      if (!res.ok) {
-        setError(data.error ?? "Failed to send OTP");
+      if (!rateRes.ok) {
+        const rateData = await rateRes.json();
+        setError(rateData.error ?? "Too many requests. Please try again later.");
         return;
       }
 
-      setSessionId(data.sessionId);
+      // ── Step 2: Initialise invisible reCAPTCHA (once per session) ─────────
+      if (!recaptchaVerifierRef.current) {
+        recaptchaVerifierRef.current = new RecaptchaVerifier(
+          getFirebaseAuth(),
+          "recaptcha-container",
+          { size: "invisible" }
+        );
+      }
+
+      // ── Step 3: Trigger SMS via Firebase client SDK ───────────────────────
+      const phoneNumber = `+91${cleaned}`;
+      const confirmationResult = await signInWithPhoneNumber(
+        getFirebaseAuth(),
+        phoneNumber,
+        recaptchaVerifierRef.current
+      );
+
+      confirmationRef.current = confirmationResult;
+
       setStep("otp");
       setTimeout(() => otpInputRef.current?.focus(), 100);
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err: unknown) {
+      console.error("Firebase signInWithPhoneNumber error:", err);
+      const firebaseErr = err as { code?: string; message?: string };
+      // Reset verifier so reCAPTCHA can be re-rendered on retry
+      recaptchaVerifierRef.current?.clear();
+      recaptchaVerifierRef.current = null;
+
+      if (firebaseErr.code === "auth/too-many-requests") {
+        setError("Too many OTP requests. Please wait a few minutes before trying again.");
+      } else if (firebaseErr.code === "auth/invalid-phone-number") {
+        setError("Invalid phone number. Please check and try again.");
+      } else {
+        setError("Failed to send OTP. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -60,38 +101,56 @@ function LoginForm() {
       return;
     }
 
+    if (!confirmationRef.current) {
+      setError("Session expired. Please request a new OTP.");
+      setStep("phone");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
     try {
+      // ── Step 4: Confirm OTP client-side → get Firebase ID token ──────────
+      const userCredential = await confirmationRef.current.confirm(code);
+      const idToken = await userCredential.user.getIdToken();
+
+      const cleaned = normalizeIndianMobile(phone);
+
+      // ── Step 5: Server verifies ID token → issues session cookie ─────────
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone: (() => {
-            const r = phone.replace(/\D/g, "");
-            return r.length === 12 && r.startsWith("91") ? r.slice(2) : r;
-          })(),
-          otp: code,
-          sessionId,
-        }),
+        body: JSON.stringify({ phone: cleaned, idToken }),
       });
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error ?? "Incorrect OTP");
+        setError(data.error ?? "Verification failed. Please try again.");
         return;
       }
 
+      // Drop the Firebase client session — the server cookie is the source of truth.
+      await signOut(getFirebaseAuth()).catch(() => {});
+
       router.replace(nextUrl);
-    } catch {
-      setError("Network error. Please try again.");
+    } catch (err: unknown) {
+      const firebaseErr = err as { code?: string };
+      if (
+        firebaseErr.code === "auth/invalid-verification-code" ||
+        firebaseErr.code === "auth/code-expired"
+      ) {
+        setError("Incorrect or expired OTP. Please try again.");
+      } else {
+        console.error("OTP confirm error:", err);
+        setError("Verification failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // WebOTP API — Android Chrome auto-fill (declared after handlers to avoid TDZ)
+  // WebOTP API — Android Chrome auto-fill
   useEffect(() => {
     if (step !== "otp") return;
     if (!("credentials" in navigator)) return;
@@ -112,7 +171,7 @@ function LoginForm() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
-  const cleanedPhone = phone.replace(/\D/g, "").replace(/^91/, "");
+  const cleanedPhone = normalizeIndianMobile(phone);
 
   return (
     <div
@@ -474,7 +533,10 @@ function LoginForm() {
                 setStep("phone");
                 setOtp("");
                 setError("");
-                setSessionId(null);
+                confirmationRef.current = null;
+                // Clear verifier so a fresh reCAPTCHA renders on next send
+                recaptchaVerifierRef.current?.clear();
+                recaptchaVerifierRef.current = null;
               }}
             >
               ← Change phone number
@@ -482,6 +544,24 @@ function LoginForm() {
           </div>
         )}
       </div>
+
+      {/*
+        Invisible reCAPTCHA mount point — Firebase attaches its widget here.
+        Must NOT be display:none — use visually-hidden instead so the DOM
+        element is properly rendered when RecaptchaVerifier initialises.
+      */}
+      <div
+        id="recaptcha-container"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
     </div>
   );
 }

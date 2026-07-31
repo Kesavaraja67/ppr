@@ -1,20 +1,41 @@
 /**
- * 2Factor.in OTP integration + rate limiting.
+ * OTP utilities — shared normalisation + best-effort rate limiting.
  *
- * 2Factor.in API (prepaid credit model — no card on file):
- *   Send OTP:   GET https://2factor.in/API/V1/{apikey}/SMS/{phone}/AUTOGEN
- *   Verify OTP: GET https://2factor.in/API/V1/{apikey}/SMS/VERIFY/{sessionId}/{otp}
+ * The actual OTP send/verify flow happens client-side via the Firebase
+ * client SDK (RecaptchaVerifier + signInWithPhoneNumber + confirmationResult.confirm).
+ * Firebase itself enforces SMS abuse through App Check, per-phone quotas,
+ * and console-level SMS region policies — those are the primary enforcement
+ * controls.
+ *
+ * This module provides:
+ *  1. `normalizeIndianMobile(input)` — shared phone-number normaliser.
+ *  2. `checkOTPRateLimit(phone, ip)` — a best-effort pre-flight guard that
+ *     prevents a well-intentioned user from spamming the Firebase trigger
+ *     from the app's own login UI. Because it uses in-process Maps, it resets
+ *     per serverless instance and is NOT a security boundary on its own.
  *
  * Rate limit: max 3 OTP requests per phone number AND per IP per 10-minute window.
- * This is a non-negotiable safeguard against prepaid-credit abuse.
  */
 
-const TWOFACTOR_API_KEY = process.env.TWOFACTOR_API_KEY ?? "";
-const TWOFACTOR_BASE = "https://2factor.in/API/V1";
+// ─── Shared normaliser ────────────────────────────────────────────────────────
+/**
+ * Strips non-digits and removes the Indian country code (91) only when the
+ * input is exactly 12 digits and starts with "91".
+ *
+ * Examples:
+ *   "9876543210"    → "9876543210"   (10-digit, no country code)
+ *   "+919876543210" → "9876543210"   (12 digits after stripping non-digits)
+ *   "919876543210"  → "9876543210"   (12 digits starting with 91)
+ *   "9198765432"    → "9198765432"   (10 digits starting with 91 — not stripped)
+ */
+export function normalizeIndianMobile(input: string): string {
+  const raw = input.replace(/\D/g, "");
+  return raw.length === 12 && raw.startsWith("91") ? raw.slice(2) : raw;
+}
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
-// In-memory per-process. Serverless resets are acceptable here — the window
-// is short (10 min) and a reset just means a fresh window, not a security hole.
+// In-process Maps. A serverless reset starts a fresh window — that is
+// acceptable here because Firebase quotas are the real enforcement layer.
 const MAX_OTP_REQUESTS = 3;
 const WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -72,83 +93,4 @@ export function checkOTPRateLimit(phone: string, ip: string): {
   checkAndRecord(phoneRateMap, normalizedPhone);
   checkAndRecord(ipRateMap, ip);
   return { allowed: true };
-}
-
-// ─── 2Factor.in API calls ────────────────────────────────────────────────────
-
-export type OTPSendResult = {
-  success: true;
-  sessionId: string;
-} | {
-  success: false;
-  error: string;
-};
-
-export async function sendOTP(phone: string): Promise<{ success: true; sessionId: string } | { success: false; error: string }> {
-  if (!TWOFACTOR_API_KEY) {
-    console.error("TWOFACTOR_API_KEY is not set");
-    return { success: false, error: "OTP service not configured" };
-  }
-
-  // Ensure 10-digit Indian mobile number
-  const cleaned = phone.replace(/\D/g, "").replace(/^91/, "");
-  if (cleaned.length !== 10) {
-    return { success: false, error: "Invalid phone number format" };
-  }
-
-  try {
-    const url = `${TWOFACTOR_BASE}/${TWOFACTOR_API_KEY}/SMS/${cleaned}/AUTOGEN`;
-    const res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(8000) });
-
-    if (!res.ok) {
-      return { success: false, error: "OTP gateway error" };
-    }
-
-    const data = await res.json() as { Status: string; Details: string };
-
-    if (data.Status !== "Success") {
-      console.error("2Factor send error:", data);
-      return { success: false, error: "Failed to send OTP" };
-    }
-
-    return { success: true, sessionId: data.Details };
-  } catch (err) {
-    console.error("2Factor fetch error:", err);
-    return { success: false, error: "Network error sending OTP" };
-  }
-}
-
-export async function verifyOTP(
-  sessionId: string,
-  otpCode: string
-): Promise<{ success: true } | { success: false; error: string }> {
-  if (!TWOFACTOR_API_KEY) {
-    return { success: false, error: "OTP service not configured" };
-  }
-
-  // Clean the OTP code — digits only
-  const cleaned = otpCode.replace(/\D/g, "");
-  if (cleaned.length < 4 || cleaned.length > 8) {
-    return { success: false, error: "Invalid OTP format" };
-  }
-
-  try {
-    const url = `${TWOFACTOR_BASE}/${TWOFACTOR_API_KEY}/SMS/VERIFY/${sessionId}/${cleaned}`;
-    const res = await fetch(url, { method: "GET", cache: "no-store", signal: AbortSignal.timeout(8000) });
-
-    if (!res.ok) {
-      return { success: false, error: "OTP gateway error" };
-    }
-
-    const data = await res.json() as { Status: string; Details: string };
-
-    if (data.Status === "Success" && data.Details === "OTP Matched") {
-      return { success: true };
-    }
-
-    return { success: false, error: "Incorrect OTP. Please try again." };
-  } catch (err) {
-    console.error("2Factor verify error:", err);
-    return { success: false, error: "Network error verifying OTP" };
-  }
 }

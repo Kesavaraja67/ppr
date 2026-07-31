@@ -155,8 +155,8 @@ const STEPS = [
     ),
   },
   {
-    label: "Order before midnight",
-    desc: "We confirm every night before 10 PM",
+    label: "Order within 8am to 8pm",
+    desc: "We confirm every night before 8 PM",
     icon: (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
@@ -328,15 +328,19 @@ function ProductCard({ veg }: { veg: Vegetable }) {
   const qty = getQty(veg.id);
   const color = CARD_COLORS[hashIndex(veg.id)];
 
+  // kg items step by 0.5; packet/dozen/piece/bunch/bag step by whole 1
+  const step = veg.unit === "kg" ? 0.5 : 1;
+
   const increment = () =>
-    setQty(veg.id, qty + 1, {
+    setQty(veg.id, parseFloat((qty + step).toFixed(1)), {
       name_en: veg.name_en,
       name_ta: veg.name_ta,
       unit: veg.unit,
       image_url: veg.image_url,
     });
 
-  const decrement = () => setQty(veg.id, Math.max(0, qty - 1));
+  const decrement = () =>
+    setQty(veg.id, parseFloat(Math.max(0, qty - step).toFixed(1)));
 
   return (
     <div
@@ -508,17 +512,48 @@ function ProductCard({ veg }: { veg: Vegetable }) {
   );
 }
 
+// ── Shop hours utility ────────────────────────────────────────────────────────
+/** Returns true if current IST time is within the 8 AM–8 PM ordering window. */
+function isWithinOrderWindow(): boolean {
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const h = nowIST.getHours();
+  return h >= 8 && h < 20;
+}
+
 // ── Main Catalog ──────────────────────────────────────────────────────────────
 export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
   const { totalCount } = useOrderList();
 
-  type Category = "all" | "vegetable" | "fruit" | "leafy";
+  type Category = "all" | "vegetable" | "fruit";
   const [category, setCategory] = useState<Category>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showIosBanner, setShowIosBanner] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
   const [showAndroidInstall, setShowAndroidInstall] = useState(false);
+  const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Scroll listener for collapsible header
+  useEffect(() => {
+    const handleScroll = () => {
+      if (window.scrollY > 35) {
+        setIsScrolled(true);
+      } else {
+        setIsScrolled(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  // Shop hours — refresh every minute
+  useEffect(() => {
+    const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Android PWA install
   useEffect(() => {
@@ -568,7 +603,6 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     { id: "all",       label: "All Items" },
     { id: "vegetable", label: "Vegetables" },
     { id: "fruit",     label: "Fruits" },
-    { id: "leafy",     label: "Leafy Greens" },
   ];
 
   const activeLabel = categories.find((c) => c.id === category)?.label ?? "Fresh Picks";
@@ -576,16 +610,35 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   return (
     <div className="page-content">
 
-      {/* ── Minimal Sticky Header ─────────────────────────────────────── */}
-      <header className="catalog-header">
-        {/* Brand row */}
+      {/* ── Premium Collapsible Sticky Header ───────────────────────────────── */}
+      <header
+        className={`catalog-header ${isScrolled ? "is-scrolled" : ""}`}
+        style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 90,
+          background: isScrolled ? "rgba(255, 255, 255, 0.88)" : "var(--bg)",
+          backdropFilter: isScrolled ? "blur(18px)" : "none",
+          WebkitBackdropFilter: isScrolled ? "blur(18px)" : "none",
+          padding: isScrolled ? "12px 16px 14px" : "16px 16px 14px",
+          borderBottomLeftRadius: isScrolled ? "22px" : "0px",
+          borderBottomRightRadius: isScrolled ? "22px" : "0px",
+          boxShadow: isScrolled ? "0 8px 24px rgba(0, 0, 0, 0.06)" : "none",
+          borderBottom: isScrolled ? "1px solid rgba(0, 0, 0, 0.06)" : "none",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        {/* Collapsible Brand row */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: "14px",
-            minHeight: "52px",
+            maxHeight: isScrolled ? "0px" : "60px",
+            opacity: isScrolled ? 0 : 1,
+            marginBottom: isScrolled ? "0px" : "14px",
+            overflow: "hidden",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -650,7 +703,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                 Install
               </button>
             )}
-            {/* Staff-only admin shortcut — deliberately low contrast, no label */}
+            {/* Staff-only admin shortcut */}
             <a
               href="/manage"
               aria-label="Staff login"
@@ -675,10 +728,11 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            background: "#F5F7F6",
-            borderRadius: "13px",
-            padding: "12px 16px",
+            background: isScrolled ? "#F0F4F2" : "#F5F7F6",
+            borderRadius: "16px",
+            padding: "11px 16px",
             border: "1.5px solid var(--border)",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           <SearchIcon />
@@ -691,10 +745,10 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               flex: 1,
               border: "none",
               outline: "none",
+              background: "transparent",
               fontFamily: "var(--font)",
               fontSize: "0.88rem",
               color: "var(--text-primary)",
-              background: "transparent",
             }}
           />
           {searchQuery && (
@@ -734,6 +788,34 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
           </button>
         ))}
       </div>
+
+      {/* ── Shop closed banner ────────────────────────────────────────────── */}
+      {!shopOpen && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            margin: "0 16px 4px",
+            padding: "12px 16px",
+            background: "#FFF7ED",
+            border: "1.5px solid #FED7AA",
+            borderRadius: "12px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <span style={{ fontSize: "1.1rem" }} aria-hidden="true">🕗</span>
+          <div>
+            <p style={{ fontWeight: 700, fontSize: "0.83rem", color: "#92400E", fontFamily: "var(--font)" }}>
+              Shop closed for ordering
+            </p>
+            <p style={{ fontSize: "0.75rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "1px" }}>
+              Orders accepted between 8 AM – 8 PM. You can browse the catalog now.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Section Header ──────────────────────────────────────────────── */}
       <div
@@ -907,84 +989,95 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
       </section>
 
       {/* ── Delivery Coverage ────────────────────────────────────────────── */}
-      {config?.covered_areas && config.covered_areas.length > 0 && (
-        <section style={{ padding: "8px 16px 24px" }}>
-          <div
-            style={{
-              background: "#F5F7F6",
-              border: "1.5px solid var(--border)",
-              borderRadius: "var(--radius-xl)",
-              padding: "20px",
-            }}
-          >
+      {(() => {
+        const DEFAULT_COVERED_AREAS = [
+          "Thudiyalur",
+          "Vadamadurai (K. Vadamadurai)",
+          "Sengalipalayam",
+          "Thoppampatti Pirivu",
+          "Maruthi Nagar",
+        ];
+        const areasToDisplay = DEFAULT_COVERED_AREAS;
+
+        return (
+          <section style={{ padding: "8px 16px 24px" }}>
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-                marginBottom: "14px",
+                background: "#F5F7F6",
+                border: "1.5px solid var(--border)",
+                borderRadius: "var(--radius-xl)",
+                padding: "20px",
               }}
             >
               <div
                 style={{
-                  width: "34px",
-                  height: "34px",
-                  background: "#1A6B47",
-                  borderRadius: "9px",
                   display: "flex",
                   alignItems: "center",
-                  justifyContent: "center",
-                  color: "#fff",
-                  flexShrink: 0,
+                  gap: "10px",
+                  marginBottom: "14px",
                 }}
               >
-                <PinIcon />
+                <div
+                  style={{
+                    width: "34px",
+                    height: "34px",
+                    background: "#1A6B47",
+                    borderRadius: "9px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#fff",
+                    flexShrink: 0,
+                  }}
+                >
+                  <PinIcon />
+                </div>
+                <div>
+                  <p
+                    style={{
+                      fontFamily: "var(--font)",
+                      fontWeight: 700,
+                      fontSize: "0.92rem",
+                      color: "var(--text-primary)",
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    Delivery areas
+                  </p>
+                  <p
+                    style={{
+                      fontFamily: "var(--font)",
+                      fontSize: "0.72rem",
+                      color: "var(--text-muted)",
+                    }}
+                  >
+                    We deliver to these neighbourhoods
+                  </p>
+                </div>
               </div>
-              <div>
-                <p
-                  style={{
-                    fontFamily: "var(--font)",
-                    fontWeight: 700,
-                    fontSize: "0.92rem",
-                    color: "var(--text-primary)",
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  Delivery areas
-                </p>
-                <p
-                  style={{
-                    fontFamily: "var(--font)",
-                    fontSize: "0.72rem",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  We deliver to these neighbourhoods
-                </p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
+                {areasToDisplay.map((area) => (
+                  <span
+                    key={area}
+                    style={{
+                      background: "#E6F4EE",
+                      color: "#1A6B47",
+                      fontSize: "0.74rem",
+                      fontFamily: "var(--font)",
+                      fontWeight: 600,
+                      padding: "5px 12px",
+                      borderRadius: "9999px",
+                      border: "1px solid #C3E6D0",
+                    }}
+                  >
+                    {area}
+                  </span>
+                ))}
               </div>
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-              {config.covered_areas.map((area) => (
-                <span
-                  key={area}
-                  style={{
-                    background: "#E6F4EE",
-                    color: "#1A6B47",
-                    fontSize: "0.74rem",
-                    fontFamily: "var(--font)",
-                    fontWeight: 600,
-                    padding: "5px 12px",
-                    borderRadius: "9999px",
-                    border: "1px solid #C3E6D0",
-                  }}
-                >
-                  {area}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+          </section>
+        );
+      })()}
 
       {/* ── Footer ──────────────────────────────────────────────────────── */}
       <footer

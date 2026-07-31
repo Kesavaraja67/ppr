@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 
 export interface OrderItem {
   veg_id: string;
@@ -25,24 +25,25 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
+  // Lazy initializer reads from sessionStorage once at mount — avoids setState-in-effect
+  // and hydration mismatch (window is only available client-side, which is safe here
+  // because this component is always rendered inside a "use client" boundary).
   const [items, setItems] = useState<OrderItem[]>(() => {
     if (typeof window === "undefined") return [];
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
-      return stored ? JSON.parse(stored) : [];
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch {
-      return [];
+      // ignore corrupt storage
     }
+    return [];
   });
 
-  const isMounted = useRef(false);
-
-  // Persist to sessionStorage on changes after initial mount
+  // Persist to sessionStorage whenever the order list changes
   useEffect(() => {
-    if (!isMounted.current) {
-      isMounted.current = true;
-      return;
-    }
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
@@ -90,7 +91,7 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const totalCount = items.reduce((sum, i) => sum + i.qty, 0);
+  const totalCount = items.length;
 
   return (
     <OrderListContext.Provider

@@ -71,7 +71,7 @@ export async function POST(
 
   // Update each priced item and build lines for delivery calc
   const pricedLines: Array<{
-    category: "vegetable" | "fruit" | "leafy";
+    category: "vegetable" | "fruit";
     line_total: number;
   }> = [];
 
@@ -95,7 +95,7 @@ export async function POST(
         .where(eq(order_items.id, item.id));
 
       pricedLines.push({
-        category: (item.category ?? "vegetable") as "vegetable" | "fruit" | "leafy",
+        category: (item.category ?? "vegetable") as "vegetable" | "fruit",
         line_total: lineTotal,
       });
     }

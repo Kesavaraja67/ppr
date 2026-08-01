@@ -9,7 +9,7 @@ import { shop_config } from "./drizzle/schema";
 // PPR Vegatable And Fruits, High School Road, NGGO Colony, Coimbatore 641022
 const SHOP_LAT = "11.0915615";
 const SHOP_LONG = "76.9452854";
-const DELIVERY_RADIUS_KM = "5";
+const DELIVERY_RADIUS_KM = "3";
 
 const client = postgres(process.env.DATABASE_URL!, { max: 1 });
 const db = drizzle(client);

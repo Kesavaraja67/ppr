@@ -42,6 +42,8 @@ export async function GET(req: NextRequest) {
       user_phone: users.phone_number,
       user_name: users.name,
       address_text: addresses.full_address,
+      lat: addresses.lat,
+      long: addresses.long,
     })
     .from(orders)
     .leftJoin(users, eq(orders.user_id, users.id))

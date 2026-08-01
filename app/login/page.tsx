@@ -54,14 +54,30 @@ function LoginForm() {
         return;
       }
 
-      // ── Step 2: Initialise invisible reCAPTCHA (once per session) ─────────
-      if (!recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current = new RecaptchaVerifier(
-          getFirebaseAuth(),
-          "recaptcha-container",
-          { size: "invisible" }
-        );
+      // ── Step 2: Initialise invisible reCAPTCHA ────────────────────────────
+      if (recaptchaVerifierRef.current) {
+        try {
+          recaptchaVerifierRef.current.clear();
+        } catch {}
+        recaptchaVerifierRef.current = null;
       }
+      const recaptchaContainer = document.getElementById("recaptcha-container");
+      if (recaptchaContainer) {
+        recaptchaContainer.innerHTML = "";
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (typeof window !== "undefined" && (window as any).grecaptcha?.reset) {
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).grecaptcha.reset();
+        } catch {}
+      }
+
+      recaptchaVerifierRef.current = new RecaptchaVerifier(
+        getFirebaseAuth(),
+        "recaptcha-container",
+        { size: "invisible" }
+      );
 
       // ── Step 3: Trigger SMS via Firebase client SDK ───────────────────────
       const phoneNumber = `+91${cleaned}`;
@@ -78,14 +94,13 @@ function LoginForm() {
     } catch (err: unknown) {
       console.error("Firebase signInWithPhoneNumber error:", err);
       const firebaseErr = err as { code?: string; message?: string };
-      // Reset verifier so reCAPTCHA can be re-rendered on retry
-      recaptchaVerifierRef.current?.clear();
-      recaptchaVerifierRef.current = null;
 
       if (firebaseErr.code === "auth/too-many-requests") {
         setError("Too many OTP requests. Please wait a few minutes before trying again.");
       } else if (firebaseErr.code === "auth/invalid-phone-number") {
         setError("Invalid phone number. Please check and try again.");
+      } else if (firebaseErr.code === "auth/billing-not-enabled") {
+        setError("Phone authentication requires billing to be enabled on this Firebase project. Please enable billing in the Firebase Console.");
       } else {
         setError("Failed to send OTP. Please try again.");
       }

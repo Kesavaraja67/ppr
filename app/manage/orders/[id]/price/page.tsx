@@ -25,80 +25,139 @@ interface Order {
   user_phone?: string;
 }
 
-// Builds plain text bill for WhatsApp / Web Share
+// Builds plain text bill for 80mm thermal print bridge (RawBT / Web Share)
 function generateTextBill(order: Order, items: OrderItem[], shopName: string) {
   const priced = items.filter((i) => i.price_per_unit !== null);
   const rows = priced
     .map((i) => {
-      const name = i.name_ta ? `${i.name_en} (${i.name_ta})` : (i.name_en ?? "Item");
+      const name = i.name_en ?? "Item";
       const qty = `${Number(i.requested_qty)} ${i.unit}`;
       const rate = `₹${Number(i.price_per_unit).toFixed(2)}`;
       const total = `₹${Number(i.line_total).toFixed(2)}`;
-      return `• ${name}\n  ${qty} × ${rate} = ${total}`;
+      return `${name}\n  ${qty} x ${rate} = ${total}`;
     })
-    .join("\n");
+    .join("\n--------------------------------\n");
 
   const subtotal = Number(order.subtotal ?? 0).toFixed(2);
-  const delivery = Number(order.delivery_charge ?? 0) === 0 ? "Free" : `₹${Number(order.delivery_charge).toFixed(2)}`;
+  const delivery = Number(order.delivery_charge ?? 0) === 0 ? "FREE" : `₹${Number(order.delivery_charge).toFixed(2)}`;
   const total = Number(order.total_amount ?? 0).toFixed(2);
 
-  return `🧾 *${shopName} Bill*
-📅 Delivery: ${order.delivery_date}
-────────────────────────
+  return `${shopName.toUpperCase()}
+================================
+Delivery: ${order.delivery_date}
+Order #: ${order.id.slice(0, 8).toUpperCase()}
+Phone: ${order.user_phone ?? 'N/A'}
+================================
 ${rows}
-────────────────────────
-Subtotal: ₹${subtotal}
-Delivery: ${delivery}
-*Total Amount: ₹${total}*
-
-Payment: Cash on delivery
-Thank you for ordering!`;
+--------------------------------
+Subtotal:        ₹${subtotal}
+Delivery Charge: ${delivery}
+================================
+TOTAL AMOUNT:    ₹${total}
+================================
+Payment: Cash on Delivery
+Shop Contact: 94437 21544
+Thank you for shopping!`;
 }
 
-// Builds HTML bill for PDF attachment / printing
+// Builds narrow 80mm thermal receipt HTML (203 dpi, ~576px / 72mm width printable area)
 async function generatePDFData(order: Order, items: OrderItem[], shopName: string) {
-  // Build HTML string and print to PDF via browser's print dialog
   const priced = items.filter((i) => i.price_per_unit !== null);
   const rows = priced
     .map(
       (i) =>
         `<tr>
-          <td>${i.name_en} (${i.name_ta})</td>
-          <td>${Number(i.requested_qty)} ${i.unit}</td>
-          <td>₹${Number(i.price_per_unit).toFixed(2)}</td>
-          <td>₹${Number(i.line_total).toFixed(2)}</td>
+          <td style="padding:4px 2px;vertical-align:top;border-bottom:1px dotted #ccc;">
+            <div style="font-weight:bold;">${i.name_en}</div>
+            ${i.name_ta ? `<div style="font-size:10px;color:#333;">${i.name_ta}</div>` : ''}
+          </td>
+          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">${Number(i.requested_qty)} ${i.unit}</td>
+          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">₹${Number(i.price_per_unit).toFixed(2)}</td>
+          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;font-weight:bold;">₹${Number(i.line_total).toFixed(2)}</td>
         </tr>`
     )
     .join("");
 
+  const subtotal = Number(order.subtotal ?? 0).toFixed(2);
+  const delivery = Number(order.delivery_charge ?? 0) === 0 ? "FREE" : `₹${Number(order.delivery_charge).toFixed(2)}`;
+  const total = Number(order.total_amount ?? 0).toFixed(2);
+
   const html = `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Bill - ${shopName}</title>
-<style>
-  body { font-family: Arial, sans-serif; padding: 24px; max-width: 480px; margin: 0 auto; }
-  h1 { font-size: 18px; text-align: center; margin-bottom: 4px; }
-  p.sub { text-align: center; color: #666; font-size: 12px; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; border-bottom: 1px solid #ccc; padding: 6px 4px; font-size: 12px; }
-  td { padding: 6px 4px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
-  .total-row { font-weight: bold; }
-  .delivery { color: #166534; }
-  .grand { font-size: 15px; }
-</style></head>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Receipt - ${order.id.slice(0, 8).toUpperCase()}</title>
+  <style>
+    @page { size: 80mm auto; margin: 0; }
+    body {
+      font-family: 'Courier New', Courier, monospace, sans-serif;
+      width: 72mm;
+      max-width: 576px;
+      margin: 0 auto;
+      padding: 10px 4px;
+      color: #000000;
+      background: #ffffff;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .bold { font-weight: bold; }
+    .header { border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
+    .header h1 { font-size: 16px; margin: 0 0 2px 0; text-transform: uppercase; }
+    .header p { margin: 2px 0; font-size: 10px; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; }
+    th { text-align: left; border-bottom: 1px solid #000; padding: 4px 2px; font-size: 10px; text-transform: uppercase; }
+    .totals-table { border-top: 1px dashed #000; margin-top: 8px; padding-top: 6px; }
+    .totals-table td { border-bottom: none; padding: 3px 2px; }
+    .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 8px; font-size: 10px; text-align: center; }
+  </style>
+</head>
 <body>
-<h1>${shopName}</h1>
-<p class="sub">Delivery Date: ${order.delivery_date}</p>
-<table>
-  <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
-  <tbody>${rows}</tbody>
-</table>
-<br>
-<table>
-  <tr><td>Subtotal</td><td></td><td></td><td>₹${Number(order.subtotal).toFixed(2)}</td></tr>
-  <tr class="delivery"><td>Delivery charge</td><td></td><td></td><td>${Number(order.delivery_charge) === 0 ? "Free" : "₹" + Number(order.delivery_charge).toFixed(2)}</td></tr>
-  <tr class="total-row grand"><td colspan="3">Total</td><td>₹${Number(order.total_amount).toFixed(2)}</td></tr>
-</table>
-<br><p style="font-size:11px;color:#999;text-align:center">Payment: Cash on delivery · Thank you for ordering!</p>
-</body></html>`;
+  <div class="header text-center">
+    <h1>${shopName}</h1>
+    <p class="bold">FRESH FRUITS &amp; VEGETABLES</p>
+    <p>Delivery: ${order.delivery_date}</p>
+    <p>Order #${order.id.slice(0, 8).toUpperCase()}</p>
+    ${order.user_phone ? `<p>Customer: ${order.user_phone}</p>` : ''}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40%;">Item</th>
+        <th style="width:20%;text-align:right;">Qty</th>
+        <th style="width:20%;text-align:right;">Rate</th>
+        <th style="width:20%;text-align:right;">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <table class="totals-table">
+    <tr>
+      <td colspan="2" style="font-weight:bold;">Subtotal:</td>
+      <td colspan="2" class="text-right bold">₹${subtotal}</td>
+    </tr>
+    <tr>
+      <td colspan="2">Delivery Charge:</td>
+      <td colspan="2" class="text-right">${delivery}</td>
+    </tr>
+    <tr style="font-size:13px;border-top:1px solid #000;">
+      <td colspan="2" class="bold" style="padding-top:6px;">GRAND TOTAL:</td>
+      <td colspan="2" class="text-right bold" style="padding-top:6px;">₹${total}</td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    <p class="bold">Payment: CASH ON DELIVERY</p>
+    <p>Call / WhatsApp: 94437 21544</p>
+    <p style="margin-top:4px;">Thank you for shopping with us!</p>
+  </div>
+</body>
+</html>`;
 
   return html;
 }

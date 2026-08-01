@@ -27,7 +27,7 @@ const MAX_AUTH_AGE_SECONDS = 5 * 60;
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { phone?: string; idToken?: string };
+    let body: { phone?: string; idToken?: string; name?: string };
     try {
       body = await req.json();
     } catch {
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     const phone = body.phone?.trim() ?? "";
     const idToken = body.idToken?.trim() ?? "";
+    const submittedName = body.name?.trim();
 
     const cleaned = normalizeIndianMobile(phone);
 
@@ -85,10 +86,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 4. Upsert user ────────────────────────────────────────────────────────
+    // ── 4. Upsert user (save name and phone_number together) ──────────────────
     const [upsertedUser] = await db
       .insert(users)
-      .values({ phone_number: expectedPhone })
+      .values({
+        phone_number: expectedPhone,
+        name: submittedName || null,
+      })
       .onConflictDoNothing({ target: users.phone_number })
       .returning({ id: users.id });
 
@@ -100,6 +104,14 @@ export async function POST(req: NextRequest) {
         .where(eq(users.phone_number, expectedPhone))
         .limit(1);
       userId = existing?.id;
+
+      // Update name on existing user if provided
+      if (userId && submittedName) {
+        await db
+          .update(users)
+          .set({ name: submittedName })
+          .where(eq(users.id, userId));
+      }
     }
 
     if (!userId) {

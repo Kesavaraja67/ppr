@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { OrderListProvider } from "@/components/OrderListProvider";
 
@@ -87,7 +88,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
         <link rel="icon" type="image/png" href="/icons/icon-32.png?v=2" sizes="32x32" />
         <link rel="icon" type="image/png" href="/icons/icon-16.png?v=2" sizes="16x16" />
-        <script
+        <Script
+          id="sw-register"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator && location.hostname !== 'localhost' && !location.hostname.startsWith('192.168')) {

@@ -4,9 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
-import { RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
-import { normalizeIndianMobile } from "@/lib/otp";
+import { normalizeIndianMobile } from "@/lib/auth-helpers";
 
 function LoginForm() {
   const router = useRouter();
@@ -20,15 +18,6 @@ function LoginForm() {
   const [error, setError] = useState("");
 
   const otpInputRef = useRef<HTMLInputElement>(null);
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
-
-  // Clean up the RecaptchaVerifier when the component unmounts
-  useEffect(() => {
-    return () => {
-      recaptchaVerifierRef.current?.clear();
-    };
-  }, []);
 
   const handleSendOtp = async () => {
     const cleaned = normalizeIndianMobile(phone);
@@ -41,69 +30,22 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      // ── Step 1: Server-side rate-limit pre-flight ─────────────────────────
-      const rateRes = await fetch("/api/auth/check-rate-limit", {
+      const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleaned }),
       });
 
-      if (!rateRes.ok) {
-        const rateData = await rateRes.json();
-        setError(rateData.error ?? "Too many requests. Please try again later.");
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Failed to send OTP. Please try again.");
         return;
       }
 
-      // ── Step 2: Initialise invisible reCAPTCHA ────────────────────────────
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {}
-        recaptchaVerifierRef.current = null;
-      }
-      const recaptchaContainer = document.getElementById("recaptcha-container");
-      if (recaptchaContainer) {
-        recaptchaContainer.innerHTML = "";
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (typeof window !== "undefined" && (window as any).grecaptcha?.reset) {
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (window as any).grecaptcha.reset();
-        } catch {}
-      }
-
-      recaptchaVerifierRef.current = new RecaptchaVerifier(
-        getFirebaseAuth(),
-        "recaptcha-container",
-        { size: "invisible" }
-      );
-
-      // ── Step 3: Trigger SMS via Firebase client SDK ───────────────────────
-      const phoneNumber = `+91${cleaned}`;
-      const confirmationResult = await signInWithPhoneNumber(
-        getFirebaseAuth(),
-        phoneNumber,
-        recaptchaVerifierRef.current
-      );
-
-      confirmationRef.current = confirmationResult;
-
       setStep("otp");
       setTimeout(() => otpInputRef.current?.focus(), 100);
-    } catch (err: unknown) {
-      console.error("Firebase signInWithPhoneNumber error:", err);
-      const firebaseErr = err as { code?: string; message?: string };
-
-      if (firebaseErr.code === "auth/too-many-requests") {
-        setError("Too many OTP requests. Please wait a few minutes before trying again.");
-      } else if (firebaseErr.code === "auth/invalid-phone-number") {
-        setError("Invalid phone number. Please check and try again.");
-      } else if (firebaseErr.code === "auth/billing-not-enabled") {
-        setError("OTP service is temporarily unavailable. Please call the shop at 94437 21544.");
-      } else {
-        setError("Failed to send OTP. Please try again.");
-      }
+    } catch {
+      setError("Failed to send OTP. Please check your connection.");
     } finally {
       setLoading(false);
     }
@@ -116,56 +58,26 @@ function LoginForm() {
       return;
     }
 
-    if (!confirmationRef.current) {
-      setError("Session expired. Please request a new OTP.");
-      setStep("phone");
-      return;
-    }
-
     setError("");
     setLoading(true);
 
     try {
-      // ── Step 4: Confirm OTP client-side → get Firebase ID token ──────────
-      const userCredential = await confirmationRef.current.confirm(code);
-      const idToken = await userCredential.user.getIdToken();
-
       const cleaned = normalizeIndianMobile(phone);
-
-      // ── Step 5: Server verifies ID token → issues session cookie ─────────
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned, idToken }),
+        body: JSON.stringify({ phone: cleaned, otp: code }),
       });
 
-      let data: { error?: string } = {};
-      try {
-        data = await res.json();
-      } catch {
-        // Non-JSON response (e.g. 500 HTML error page)
-      }
-
+      const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Verification failed. Please check server configuration.");
+        setError(data.error ?? "Verification failed. Please check the OTP code.");
         return;
       }
 
-      // Drop the Firebase client session — the server cookie is the source of truth.
-      await signOut(getFirebaseAuth()).catch(() => {});
-
       router.replace(nextUrl);
-    } catch (err: unknown) {
-      const firebaseErr = err as { code?: string };
-      if (
-        firebaseErr.code === "auth/invalid-verification-code" ||
-        firebaseErr.code === "auth/code-expired"
-      ) {
-        setError("Incorrect or expired OTP. Please try again.");
-      } else {
-        console.error("OTP confirm error:", err);
-        setError("Verification failed. Please try again.");
-      }
+    } catch {
+      setError("Verification failed. Please try again.");
     } finally {
       setLoading(false);
     }

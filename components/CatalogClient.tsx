@@ -980,12 +980,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
       {/* ── Product Grid ─────────────────────────────────────────────────── */}
       <main
         id="product-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          gap: "12px",
-          padding: "0 16px",
-        }}
+        className="product-grid-responsive"
       >
         {filtered.length === 0 ? (
           <div

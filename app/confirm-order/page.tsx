@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
-import { RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from "firebase/auth";
-import { getFirebaseAuth } from "@/lib/firebase-client";
-import { normalizeIndianMobile } from "@/lib/otp";
+import { normalizeIndianMobile } from "@/lib/auth-helpers";
 
 interface SavedAddress {
   id: string;
@@ -73,18 +71,8 @@ export default function ConfirmOrderPage() {
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState("");
 
-  const confirmationRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
-
-  // Clean up RecaptchaVerifier on unmount
-  useEffect(() => {
-    return () => {
-      recaptchaVerifierRef.current?.clear();
-      recaptchaVerifierRef.current = null;
-    };
-  }, []);
 
   // Modal Escape key & focus handling
   useEffect(() => {
@@ -199,21 +187,35 @@ export default function ConfirmOrderPage() {
           setSubmitError("Please tap 'Use my location' to pin your delivery location.");
           return false;
         }
-        const withinRange = shopCoords ? isWithinRange() : true;
-        if (!withinRange) {
+        // Immediate client-side UX feedback
+        if (shopCoords && newAddressCoords && !isWithinRange()) {
           setSubmitError(
-            `Sorry, your location is outside our ${shopCoords?.radius ?? 3}km delivery zone. Please call the shop at 94437 21544.`
+            `Sorry, your location is outside our ${shopCoords.radius}km delivery zone. Please call the shop at 94437 21544.`
           );
           return false;
         }
-        addressPayload = {
-          new_address: {
-            full_address: newAddressText.trim(),
-            lat: newAddressCoords.lat,
-            long: newAddressCoords.long,
-            is_within_range: true,
-          },
-        };
+
+        // Call server-side POST /api/addresses for address creation and Haversine radius validation
+        try {
+          const addrRes = await fetch("/api/addresses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              full_address: newAddressText.trim(),
+              lat: newAddressCoords.lat,
+              long: newAddressCoords.long,
+            }),
+          });
+          const addrData = await addrRes.json();
+          if (!addrRes.ok) {
+            setSubmitError(addrData.error ?? "Failed to save delivery address.");
+            return false;
+          }
+          addressPayload = { address_id: addrData.address.id };
+        } catch {
+          setSubmitError("Failed to save delivery address. Please try again.");
+          return false;
+        }
       } else {
         if (!selectedAddressId) {
           setSubmitError("Please select a delivery address.");
@@ -317,51 +319,21 @@ export default function ConfirmOrderPage() {
     setOtpLoading(true);
 
     try {
-      const rateRes = await fetch("/api/auth/check-rate-limit", {
+      const res = await fetch("/api/auth/send-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone: cleaned }),
       });
 
-      if (!rateRes.ok) {
-        const rateData = await rateRes.json();
-        setOtpError(rateData.error ?? "Too many requests. Please try again later.");
+      const data = await res.json();
+      if (!res.ok) {
+        setOtpError(data.error ?? "Failed to send OTP. Please try again.");
         return;
       }
 
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {}
-        recaptchaVerifierRef.current = null;
-      }
-      const container = document.getElementById("onboard-recaptcha-container");
-      if (container) container.innerHTML = "";
-
-      recaptchaVerifierRef.current = new RecaptchaVerifier(
-        getFirebaseAuth(),
-        "onboard-recaptcha-container",
-        { size: "invisible" }
-      );
-
-      const phoneNumber = `+91${cleaned}`;
-      const confirmationResult = await signInWithPhoneNumber(
-        getFirebaseAuth(),
-        phoneNumber,
-        recaptchaVerifierRef.current
-      );
-
-      confirmationRef.current = confirmationResult;
       setOnboardingStep("otp");
-    } catch (err: unknown) {
-      console.error("OTP send error:", err);
-      const firebaseErr = err as { code?: string };
-
-      if (firebaseErr.code === "auth/billing-not-enabled") {
-        setOtpError("OTP service is temporarily unavailable. Please call the shop at 94437 21544.");
-      } else {
-        setOtpError("Failed to send OTP. Please check mobile number and try again.");
-      }
+    } catch {
+      setOtpError("Failed to send OTP. Please check mobile number and try again.");
     } finally {
       setOtpLoading(false);
     }
@@ -369,13 +341,7 @@ export default function ConfirmOrderPage() {
 
   const handleVerifyOtp = async () => {
     if (!onboardOtp || onboardOtp.length < 4) {
-      setOtpError("Enter the 6-digit OTP code");
-      return;
-    }
-
-    if (!confirmationRef.current) {
-      setOtpError("Session expired. Please request a new OTP.");
-      setOnboardingStep("details");
+      setOtpError("Enter the OTP code sent to your mobile");
       return;
     }
 
@@ -383,44 +349,27 @@ export default function ConfirmOrderPage() {
     setOtpLoading(true);
 
     try {
-      const userCredential = await confirmationRef.current.confirm(onboardOtp);
-      const idToken = await userCredential.user.getIdToken();
       const cleaned = normalizeIndianMobile(onboardPhone);
 
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned, idToken, name: customerName.trim() }),
+        body: JSON.stringify({ phone: cleaned, otp: onboardOtp, name: customerName.trim() }),
       });
 
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
-        setOtpError(data.error ?? "Verification failed. Please try again.");
+        setOtpError(data.error ?? "Verification failed. Please check the OTP code.");
         return;
       }
 
-      await signOut(getFirebaseAuth()).catch(() => {});
       setLoggedIn(true);
       setShowOnboarding(false);
 
       // Now place the order
       await executeOrderSubmission();
-    } catch (err: unknown) {
-      console.error("OTP verify error:", err);
-      const firebaseErr = err as { code?: string };
-      if (
-        firebaseErr.code === "auth/network-request-failed" ||
-        (typeof navigator !== "undefined" && !navigator.onLine)
-      ) {
-        setOtpError("Network error. Please check your connection and try again.");
-      } else if (
-        firebaseErr.code === "auth/invalid-verification-code" ||
-        firebaseErr.code === "auth/code-expired"
-      ) {
-        setOtpError("Invalid or expired verification code. Please check and try again.");
-      } else {
-        setOtpError("Verification failed. Please try again.");
-      }
+    } catch {
+      setOtpError("Verification failed. Please try again.");
     } finally {
       setOtpLoading(false);
     }

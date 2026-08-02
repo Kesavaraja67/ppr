@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import "./globals.css";
 import { OrderListProvider } from "@/components/OrderListProvider";
 
@@ -69,33 +70,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="manifest" href="/manifest.json" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
-        <link
-          rel="apple-touch-startup-image"
-          href="/splash/apple-splash-1170x2532.png"
-          media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/splash/apple-splash-1080x1920.png"
-          media="(device-width: 360px) and (device-height: 640px) and (-webkit-device-pixel-ratio: 3)"
-        />
-        <link
-          rel="apple-touch-startup-image"
-          href="/splash/apple-splash-828x1792.png"
-          media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)"
-        />
-        <link rel="icon" type="image/png" href="/icons/icon-32.png?v=2" sizes="32x32" />
-        <link rel="icon" type="image/png" href="/icons/icon-16.png?v=2" sizes="16x16" />
-        <script
+        <link rel="icon" type="image/png" href="/icons/icon-32.png?v=12" sizes="32x32" />
+        <link rel="icon" type="image/png" href="/icons/icon-16.png?v=12" sizes="16x16" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png?v=12" />
+        <link rel="shortcut icon" href="/favicon.ico?v=12" />
+        <Script
+          id="sw-register"
+          strategy="afterInteractive"
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator && location.hostname !== 'localhost' && !location.hostname.startsWith('192.168')) {
-                window.addEventListener('load', function() {
+                function registerSW() {
                   navigator.serviceWorker.register('/sw.js').catch(function(err) {
                     console.warn('SW registration failed:', err);
                   });
-                });
+                }
+                if (document.readyState === 'complete') {
+                  registerSW();
+                } else {
+                  window.addEventListener('load', registerSW, { once: true });
+                }
               }
             `,
           }}

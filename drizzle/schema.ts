@@ -103,8 +103,8 @@ export const addresses = pgTable("addresses", {
   id: uuid("id").primaryKey().defaultRandom(),
   user_id: uuid("user_id").references(() => users.id),
   full_address: text("full_address").notNull(),
-  lat: numeric("lat").notNull(),
-  long: numeric("long").notNull(),
+  lat: numeric("lat", { mode: "number" }).notNull(),
+  long: numeric("long", { mode: "number" }).notNull(),
   // Computed at save time using Haversine against shop_config coordinates + radius
   is_within_range: boolean("is_within_range").notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),

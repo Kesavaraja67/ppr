@@ -11,7 +11,7 @@
  */
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { getAuth, initializeAuth, browserLocalPersistence, inMemoryPersistence, type Auth } from "firebase/auth";
 
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
@@ -32,7 +32,13 @@ export function getFirebaseAuth(): Auth {
     _app = getApps().length > 0 ? getApp() : initializeApp(getFirebaseConfig());
   }
   if (!_auth) {
-    _auth = getAuth(_app);
+    try {
+      _auth = initializeAuth(_app, {
+        persistence: typeof window !== "undefined" ? [browserLocalPersistence, inMemoryPersistence] : [],
+      });
+    } catch {
+      _auth = getAuth(_app);
+    }
   }
   return _auth;
 }

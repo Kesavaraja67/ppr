@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
+import { RecaptchaVerifier, signInWithPhoneNumber, signOut, type ConfirmationResult } from "firebase/auth";
+import { getFirebaseAuth } from "@/lib/firebase-client";
+import { normalizeIndianMobile } from "@/lib/otp";
 
 interface SavedAddress {
   id: string;
@@ -14,13 +17,41 @@ interface SavedAddress {
   is_within_range: boolean;
 }
 
+function MapPinIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A6B47" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <polyline points="12 19 5 12 12 5" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
 export default function ConfirmOrderPage() {
   const router = useRouter();
-  const { items, setQty, removeItem, clearAll } = useOrderList();
+  const { items, removeItem, clearAll } = useOrderList();
 
   const [authChecked, setAuthChecked] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
 
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
@@ -29,9 +60,52 @@ export default function ConfirmOrderPage() {
   const [newAddressCoords, setNewAddressCoords] = useState<{ lat: number; long: number } | null>(null);
   const [locationError, setLocationError] = useState("");
   const [shopCoords, setShopCoords] = useState<{ lat: number; long: number; radius: number } | null>(null);
+  
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
+
+  // Onboarding Modal state for unauthenticated users tapping "Submit Order"
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState<"details" | "otp">("details");
+  const [onboardPhone, setOnboardPhone] = useState("");
+  const [onboardOtp, setOnboardOtp] = useState("");
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState("");
+
+  const confirmationRef = useRef<ConfirmationResult | null>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+  const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
+  const onboardOtpInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up RecaptchaVerifier on unmount
+  useEffect(() => {
+    return () => {
+      recaptchaVerifierRef.current?.clear();
+      recaptchaVerifierRef.current = null;
+    };
+  }, []);
+
+  // Modal Escape key & focus handling
+  useEffect(() => {
+    if (!showOnboarding) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowOnboarding(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    setTimeout(() => {
+      if (onboardingStep === "details") {
+        onboardPhoneInputRef.current?.focus();
+      } else {
+        onboardOtpInputRef.current?.focus();
+      }
+    }, 50);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showOnboarding, onboardingStep]);
 
   function isWithinOrderWindow(): boolean {
     const nowIST = new Date(
@@ -41,26 +115,7 @@ export default function ConfirmOrderPage() {
     return h >= 8 && h < 20;
   }
 
-  // Auth check on mount — redirect to /login if not signed in
-  useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        setLoggedIn(!!d.loggedIn);
-        setAuthChecked(true);
-        // Pre-fill name for returning customers
-        if (d.name) setCustomerName(d.name);
-      })
-      .catch(() => setAuthChecked(true));
-  }, []);
-
-  // Shop hours — recalculate every minute
-  useEffect(() => {
-    const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Load shop config for haversine validation
+  // Load shop config for distance check
   useEffect(() => {
     fetch("/api/shop-config")
       .then((r) => r.json())
@@ -76,24 +131,38 @@ export default function ConfirmOrderPage() {
       .catch(() => {});
   }, []);
 
-  // Load user's saved addresses
+  // Auth check on mount
   useEffect(() => {
-    fetch("/api/addresses")
-      .then((r) => (r.ok ? r.json() : null))
+    fetch("/api/auth/me")
+      .then((r) => r.json())
       .then((d) => {
-        if (d?.addresses?.length) {
-          setSavedAddresses(d.addresses);
-          setSelectedAddressId(d.addresses[0].id);
+        setLoggedIn(!!d.loggedIn);
+        if (d.loggedIn) {
+          if (d.name) setCustomerName(d.name);
+          if (d.phone_number) setCustomerPhone(d.phone_number);
+          if (d.addresses?.length) {
+            setSavedAddresses(d.addresses);
+            setSelectedAddressId(d.addresses[0].id);
+          } else {
+            setShowNewAddress(true);
+          }
         } else {
           setShowNewAddress(true);
         }
+        setAuthChecked(true);
       })
-      .catch(() => {});
+      .catch(() => setAuthChecked(true));
+  }, []);
+
+  // Shop hours timer
+  useEffect(() => {
+    const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
+    return () => clearInterval(id);
   }, []);
 
   const getLocation = () => {
     if (!navigator.geolocation) {
-      setLocationError("Geolocation is not supported by your browser.");
+      setLocationError("Geolocation is not supported by your browser. Please enter address manually.");
       return;
     }
     setLocationError("");
@@ -102,9 +171,11 @@ export default function ConfirmOrderPage() {
         setNewAddressCoords({ lat: pos.coords.latitude, long: pos.coords.longitude });
         setLocationError("");
       },
-      () => {
-        setLocationError("Could not get your location. Please try again or enter address manually.");
-      }
+      (err) => {
+        console.warn("Geolocation permission error:", err);
+        setLocationError("Could not detect location automatically. Please enter your full address manually below.");
+      },
+      { timeout: 10000 }
     );
   };
 
@@ -114,65 +185,42 @@ export default function ConfirmOrderPage() {
     return d <= shopCoords.radius;
   };
 
-  const handleSubmit = async () => {
-    if (items.length === 0) return;
+  // Execute order submission
+  const executeOrderSubmission = async (overrideAddressPayload?: unknown) => {
+    let addressPayload: unknown = overrideAddressPayload;
 
-    // Validate name
-    if (!customerName.trim()) {
-      setSubmitError("Please enter your name before placing the order.");
-      return;
-    }
-
-    // Block if outside ordering hours
-    if (!isWithinOrderWindow()) {
-      setSubmitError("Orders are accepted between 8 AM and 8 PM. Please try again during shop hours.");
-      return;
-    }
-
-    // Validate quantities — kg items allow 0.5 minimum, others require at least 1
-    for (const item of items) {
-      const minQty = item.unit === "kg" ? 0.5 : 1;
-      if (item.qty < minQty) {
-        setSubmitError(`Minimum ${minQty} ${item.unit} required for ${item.name_en}`);
-        return;
+    if (!addressPayload) {
+      if (showNewAddress) {
+        if (!newAddressText.trim()) {
+          setSubmitError("Please enter your delivery address.");
+          return false;
+        }
+        if (!newAddressCoords) {
+          setSubmitError("Please tap 'Use my location' to pin your delivery location.");
+          return false;
+        }
+        const withinRange = shopCoords ? isWithinRange() : true;
+        if (!withinRange) {
+          setSubmitError(
+            `Sorry, your location is outside our ${shopCoords?.radius ?? 3}km delivery zone. Please call the shop at 94437 21544.`
+          );
+          return false;
+        }
+        addressPayload = {
+          new_address: {
+            full_address: newAddressText.trim(),
+            lat: newAddressCoords.lat,
+            long: newAddressCoords.long,
+            is_within_range: true,
+          },
+        };
+      } else {
+        if (!selectedAddressId) {
+          setSubmitError("Please select a delivery address.");
+          return false;
+        }
+        addressPayload = { address_id: selectedAddressId };
       }
-    }
-
-    let addressPayload: {
-      address_id?: string;
-      new_address?: { full_address: string; lat: number; long: number; is_within_range: boolean };
-    };
-
-    if (showNewAddress) {
-      if (!newAddressText.trim()) {
-        setSubmitError("Please enter your delivery address.");
-        return;
-      }
-      if (!newAddressCoords) {
-        setSubmitError("Please tap 'Use my location' to pin your delivery location.");
-        return;
-      }
-      const withinRange = shopCoords ? isWithinRange() : true;
-      if (!withinRange) {
-        setSubmitError(
-          `Sorry, your location is outside our ${shopCoords?.radius ?? 3}km delivery zone. Please call the shop at 94437 21544 to discuss options.`
-        );
-        return;
-      }
-      addressPayload = {
-        new_address: {
-          full_address: newAddressText.trim(),
-          lat: newAddressCoords.lat,
-          long: newAddressCoords.long,
-          is_within_range: true,
-        },
-      };
-    } else {
-      if (!selectedAddressId) {
-        setSubmitError("Please select a delivery address.");
-        return;
-      }
-      addressPayload = { address_id: selectedAddressId };
     }
 
     setSubmitError("");
@@ -183,7 +231,7 @@ export default function ConfirmOrderPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...addressPayload,
+          ...(addressPayload as object),
           name: customerName.trim(),
           items: items.map((i) => ({
             veg_id: i.veg_id,
@@ -197,418 +245,611 @@ export default function ConfirmOrderPage() {
 
       if (!res.ok) {
         setSubmitError(data.error ?? "Failed to place order. Please try again.");
-        return;
+        setSubmitting(false);
+        return false;
       }
 
+      // Order created successfully — clear order list state and navigate to confirmation
       clearAll();
-      router.replace(`/orders/${data.orderId}/confirmed`);
+      router.push(`/orders/${data.orderId}/confirmed`);
+      return true;
     } catch {
       setSubmitError("Network error. Please check your connection and try again.");
-    } finally {
       setSubmitting(false);
+      return false;
     }
   };
 
-  // Auth gate — show spinner until auth checked, then gate if not logged in
+  const handleSubmit = async () => {
+    if (items.length === 0 || submitting) return;
+
+    if (!shopOpen) {
+      setSubmitError("Orders are accepted between 8 AM and 8 PM. Please try again during shop hours.");
+      return;
+    }
+
+    // Validate minimum quantities
+    for (const item of items) {
+      const minQty = item.unit === "kg" ? 0.5 : 1;
+      if (item.qty < minQty) {
+        setSubmitError(`Minimum ${minQty} ${item.unit} required for ${item.name_en}`);
+        return;
+      }
+    }
+
+    // If NOT logged in, trigger 2-step onboarding modal flow
+    if (!loggedIn) {
+      if (!customerName.trim()) {
+        setSubmitError("Please enter your name.");
+        return;
+      }
+      if (showNewAddress && !newAddressText.trim()) {
+        setSubmitError("Please enter your address.");
+        return;
+      }
+      if (showNewAddress && !newAddressCoords) {
+        setSubmitError("Please tap 'Use my location' to pin your delivery location.");
+        return;
+      }
+      setSubmitError("");
+      setShowOnboarding(true);
+      return;
+    }
+
+    // Logged in user — execute order submission directly
+    if (!customerName.trim()) {
+      setSubmitError("Please enter your name.");
+      return;
+    }
+
+    await executeOrderSubmission();
+  };
+
+  // OTP Handling inside onboarding
+  const handleSendOtp = async () => {
+    const cleaned = normalizeIndianMobile(onboardPhone);
+    if (cleaned.length !== 10) {
+      setOtpError("Enter a valid 10-digit mobile number");
+      return;
+    }
+
+    setOtpError("");
+    setOtpLoading(true);
+
+    try {
+      const rateRes = await fetch("/api/auth/check-rate-limit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleaned }),
+      });
+
+      if (!rateRes.ok) {
+        const rateData = await rateRes.json();
+        setOtpError(rateData.error ?? "Too many requests. Please try again later.");
+        return;
+      }
+
+      if (recaptchaVerifierRef.current) {
+        try {
+          recaptchaVerifierRef.current.clear();
+        } catch {}
+        recaptchaVerifierRef.current = null;
+      }
+      const container = document.getElementById("onboard-recaptcha-container");
+      if (container) container.innerHTML = "";
+
+      recaptchaVerifierRef.current = new RecaptchaVerifier(
+        getFirebaseAuth(),
+        "onboard-recaptcha-container",
+        { size: "invisible" }
+      );
+
+      const phoneNumber = `+91${cleaned}`;
+      const confirmationResult = await signInWithPhoneNumber(
+        getFirebaseAuth(),
+        phoneNumber,
+        recaptchaVerifierRef.current
+      );
+
+      confirmationRef.current = confirmationResult;
+      setOnboardingStep("otp");
+    } catch (err: unknown) {
+      console.error("OTP send error:", err);
+      const firebaseErr = err as { code?: string };
+
+      if (firebaseErr.code === "auth/billing-not-enabled") {
+        setOtpError("OTP service is temporarily unavailable. Please call the shop at 94437 21544.");
+      } else {
+        setOtpError("Failed to send OTP. Please check mobile number and try again.");
+      }
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!onboardOtp || onboardOtp.length < 4) {
+      setOtpError("Enter the 6-digit OTP code");
+      return;
+    }
+
+    if (!confirmationRef.current) {
+      setOtpError("Session expired. Please request a new OTP.");
+      setOnboardingStep("details");
+      return;
+    }
+
+    setOtpError("");
+    setOtpLoading(true);
+
+    try {
+      const userCredential = await confirmationRef.current.confirm(onboardOtp);
+      const idToken = await userCredential.user.getIdToken();
+      const cleaned = normalizeIndianMobile(onboardPhone);
+
+      const res = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: cleaned, idToken, name: customerName.trim() }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setOtpError(data.error ?? "Verification failed. Please try again.");
+        return;
+      }
+
+      await signOut(getFirebaseAuth()).catch(() => {});
+      setLoggedIn(true);
+      setShowOnboarding(false);
+
+      // Now place the order
+      await executeOrderSubmission();
+    } catch (err: unknown) {
+      console.error("OTP verify error:", err);
+      const firebaseErr = err as { code?: string };
+      if (
+        firebaseErr.code === "auth/network-request-failed" ||
+        (typeof navigator !== "undefined" && !navigator.onLine)
+      ) {
+        setOtpError("Network error. Please check your connection and try again.");
+      } else if (
+        firebaseErr.code === "auth/invalid-verification-code" ||
+        firebaseErr.code === "auth/code-expired"
+      ) {
+        setOtpError("Invalid or expired verification code. Please check and try again.");
+      } else {
+        setOtpError("Verification failed. Please try again.");
+      }
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   if (!authChecked) {
     return (
-      <div style={{ padding: "80px 24px", textAlign: "center", color: "#9ca3af" }}>
-        Loading…
-      </div>
-    );
-  }
-
-  if (!loggedIn) {
-    return (
-      <div
-        style={{
-          minHeight: "100dvh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "32px 24px",
-          textAlign: "center",
-          background: "var(--bg)",
-        }}
-      >
-        <div
-          style={{
-            width: "64px",
-            height: "64px",
-            borderRadius: "9999px",
-            background: "#f0fdf4",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: "20px",
-          }}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#166534" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-          </svg>
+      <div className="page-content" style={{ padding: "20px 16px", maxWidth: "500px", margin: "0 auto" }}>
+        <div style={{ height: "24px", width: "140px", background: "#E5E7EB", borderRadius: "8px", marginBottom: "24px" }} />
+        <div style={{ background: "#fff", borderRadius: "20px", padding: "20px", marginBottom: "16px", border: "1px solid #E5E7EB" }}>
+          <div style={{ height: "20px", width: "60%", background: "#F3F4F6", borderRadius: "6px", marginBottom: "12px" }} />
+          <div style={{ height: "16px", width: "40%", background: "#F3F4F6", borderRadius: "6px" }} />
         </div>
-        <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "10px" }}>
-          Sign in to place your order
-        </h1>
-        <p style={{ color: "#6b7280", fontSize: "0.88rem", maxWidth: "280px", lineHeight: 1.6, marginBottom: "28px" }}>
-          We need your mobile number to confirm delivery and keep track of your orders.
-        </p>
-        <Link
-          href="/login?next=/confirm-order"
-          className="btn-accent"
-          style={{ display: "inline-flex", justifyContent: "center", minWidth: "200px" }}
-        >
-          Sign in with OTP
-        </Link>
-        <Link
-          href="/"
-          style={{
-            marginTop: "12px",
-            fontSize: "0.85rem",
-            color: "#9ca3af",
-          }}
-        >
-          ← Back to catalog
-        </Link>
-      </div>
-    );
-  }
-
-  // Outside ordering hours gate
-  if (!shopOpen) {
-    return (
-      <div
-        style={{
-          minHeight: "100dvh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "32px 24px",
-          textAlign: "center",
-          background: "var(--bg)",
-        }}
-      >
-        <div
-          style={{
-            width: "64px",
-            height: "64px",
-            borderRadius: "9999px",
-            background: "#FFF7ED",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginBottom: "20px",
-            fontSize: "1.8rem",
-          }}
-        >
-          🕗
-        </div>
-        <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "10px", color: "#92400E" }}>
-          Shop is closed for now
-        </h1>
-        <p style={{ color: "#B45309", fontSize: "0.88rem", maxWidth: "280px", lineHeight: 1.6, marginBottom: "28px" }}>
-          Orders are accepted between <strong>8 AM and 8 PM</strong>. Please come back during shop hours.
-        </p>
-        <Link href="/" className="btn-accent" style={{ display: "inline-flex", minWidth: "200px", justifyContent: "center" }}>
-          Browse catalog
-        </Link>
       </div>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div style={{ padding: "40px 24px", textAlign: "center" }}>
-        <p style={{ fontSize: "1.1rem", color: "#6b7280", marginBottom: "20px" }}>
-          Your order list is empty.
+      <div style={{ padding: "40px 16px", textAlign: "center", maxWidth: "500px", margin: "0 auto" }} className="page-content">
+        <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginBottom: "12px", fontFamily: "var(--font)" }}>
+          Your order list is empty
+        </h1>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "24px", fontFamily: "var(--font)" }}>
+          Browse our fresh vegetables and fruits to create your order.
         </p>
-        <Link href="/" className="btn-accent" style={{ display: "inline-flex" }}>
-          Browse catalog
+        <Link
+          href="/"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "#1A6B47",
+            color: "#fff",
+            padding: "12px 24px",
+            borderRadius: "9999px",
+            fontWeight: 700,
+            fontSize: "0.9rem",
+            textDecoration: "none",
+          }}
+        >
+          Browse fresh items
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="page-content">
-      {/* Header */}
-      <header
-        style={{
-          padding: "16px",
-          borderBottom: "1px solid #e5e7eb",
-          display: "flex",
-          alignItems: "center",
-          gap: "12px",
-        }}
-      >
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>
-          ←
-        </button>
-        <h1 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Confirm Order</h1>
-      </header>
+    <div style={{ padding: "16px 16px 100px", maxWidth: "500px", margin: "0 auto" }} className="page-content">
+      <div id="onboard-recaptcha-container" />
 
-      <div style={{ padding: "16px" }}>
-        {/* Order info */}
-        <div
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+        <Link
+          href="/"
           style={{
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: "10px",
-            padding: "12px 14px",
-            marginBottom: "20px",
-            fontSize: "0.83rem",
-            color: "#166534",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: "38px",
+            height: "38px",
+            borderRadius: "50%",
+            background: "#F3F4F6",
+            color: "var(--text-primary)",
+            textDecoration: "none",
           }}
         >
-          All orders are for <strong>next-day delivery</strong>. You can cancel by <strong>10:00 PM today</strong>.
-        </div>
+          <BackIcon />
+        </Link>
+        <h1 style={{ fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font)", color: "var(--text-primary)" }}>
+          Confirm Order
+        </h1>
+      </div>
 
-        {/* Customer Name */}
-        <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "10px" }}>Your Name</h2>
-        <div style={{ marginBottom: "24px" }}>
-          <input
-            id="customer-name"
-            type="text"
-            placeholder="e.g. Rajan Murugesan"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            autoComplete="name"
-            className="admin-input"
-            style={{
-              borderColor: !customerName.trim() && submitError ? "#dc2626" : undefined,
-            }}
-          />
-          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginTop: "5px" }}>
-            So we can address your order correctly.
-          </p>
+      {submitError && (
+        <div style={{ padding: "12px 16px", background: "#FEF2F2", color: "#DC2626", border: "1px solid #FCA5A5", borderRadius: "14px", fontSize: "0.85rem", fontWeight: 600, marginBottom: "16px" }}>
+          {submitError}
         </div>
+      )}
 
-        {/* Items list */}
-        <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "12px" }}>
-          Your Order List
+      {/* Selected Items Summary Card */}
+      <div style={{ background: "#ffffff", borderRadius: "20px", padding: "18px", border: "1.5px solid var(--border)", boxShadow: "0 4px 16px rgba(0,0,0,0.03)", marginBottom: "16px" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, fontFamily: "var(--font)", marginBottom: "12px", color: "var(--text-primary)" }}>
+          Selected Items ({items.length})
         </h2>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "24px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           {items.map((item) => (
-            <div
-              key={item.veg_id}
-              className="product-card"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                padding: "10px 12px",
-              }}
-            >
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 700, fontSize: "0.9rem" }}>{item.name_en}</p>
-                <p style={{ color: "#6b7280", fontSize: "0.78rem" }}>{item.name_ta} · per {item.unit}</p>
+            <div key={item.veg_id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.88rem" }}>
+              <div>
+                <span style={{ fontWeight: 700, color: "var(--text-primary)" }}>{item.name_en}</span>{" "}
+                <span style={{ color: "#9CA3AF", fontSize: "0.78rem" }}>({item.name_ta})</span>
               </div>
-
-              {/* Qty controls */}
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span style={{ fontWeight: 700, color: "#1A6B47" }}>{item.qty} {item.unit}</span>
                 <button
-                  onClick={() => {
-                    const step = item.unit === "kg" ? 0.5 : 1;
-                    const minQty = item.unit === "kg" ? 0.5 : 1;
-                    setQty(item.veg_id, parseFloat(Math.max(minQty, item.qty - step).toFixed(1)));
-                  }}
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "9999px",
-                    border: "1.5px solid #e5e7eb",
-                    background: "#fff",
-                    fontSize: "1rem",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                  onClick={() => removeItem(item.veg_id)}
+                  style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: "0.78rem" }}
                 >
-                  −
-                </button>
-                <span style={{ fontWeight: 700, minWidth: "32px", textAlign: "center", fontSize: "0.9rem" }}>
-                  {item.qty % 1 === 0 ? item.qty : item.qty.toFixed(1)}
-                </span>
-                <button
-                  onClick={() => {
-                    const step = item.unit === "kg" ? 0.5 : 1;
-                    setQty(item.veg_id, parseFloat((item.qty + step).toFixed(1)), {
-                      name_en: item.name_en,
-                      name_ta: item.name_ta,
-                      unit: item.unit,
-                      image_url: item.image_url,
-                    });
-                  }}
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "9999px",
-                    background: "#166534",
-                    color: "#fff",
-                    border: "none",
-                    fontSize: "1rem",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  +
+                  Remove
                 </button>
               </div>
-
-              <button
-                onClick={() => removeItem(item.veg_id)}
-                style={{ color: "#dc2626", background: "none", border: "none", fontSize: "1.1rem", cursor: "pointer", padding: "4px" }}
-                aria-label={`Remove ${item.name_en}`}
-              >
-                ×
-              </button>
             </div>
           ))}
         </div>
+      </div>
 
-        {/* Address section */}
-        <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "12px" }}>
-          Delivery Address
+      {/* Customer Name & Address Card */}
+      <div style={{ background: "#ffffff", borderRadius: "20px", padding: "18px", border: "1.5px solid var(--border)", boxShadow: "0 4px 16px rgba(0,0,0,0.03)", marginBottom: "20px" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, fontFamily: "var(--font)", marginBottom: "14px", color: "var(--text-primary)" }}>
+          Delivery &amp; Customer Details
         </h2>
 
+        {/* Full Name */}
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Your Full Name *
+          </label>
+          <input
+            type="text"
+            value={customerName}
+            onChange={(e) => setCustomerName(e.target.value)}
+            placeholder="e.g. Anand Kumar"
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: "12px",
+              border: "1.5px solid var(--border)",
+              fontSize: "0.95rem",
+              fontFamily: "var(--font)",
+              outline: "none",
+            }}
+          />
+        </div>
+
+        {/* Verified Phone */}
+        {customerPhone && (
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "4px", textTransform: "uppercase" }}>
+              Verified Mobile Number
+            </label>
+            <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--text-primary)" }}>{customerPhone}</p>
+          </div>
+        )}
+
+        {/* Saved Addresses (if returning customer) */}
         {savedAddresses.length > 0 && !showNewAddress && (
           <div style={{ marginBottom: "16px" }}>
-            {savedAddresses.map((addr) => (
-              <label
-                key={addr.id}
-                style={{
-                  display: "flex",
-                  gap: "10px",
-                  padding: "12px",
-                  border: `1.5px solid ${selectedAddressId === addr.id ? "#166534" : "#e5e7eb"}`,
-                  borderRadius: "10px",
-                  marginBottom: "8px",
-                  cursor: "pointer",
-                  background: selectedAddressId === addr.id ? "#f0fdf4" : "#fff",
-                }}
-              >
-                <input
-                  type="radio"
-                  name="address"
-                  value={addr.id}
-                  checked={selectedAddressId === addr.id}
-                  onChange={() => setSelectedAddressId(addr.id)}
-                  style={{ marginTop: "2px", accentColor: "#166534" }}
-                />
-                <div>
-                  <p style={{ fontSize: "0.87rem", fontWeight: 600 }}>{addr.full_address}</p>
-                  {!addr.is_within_range && (
-                    <p style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "4px" }}>
-                      ⚠ Outside delivery zone
-                    </p>
-                  )}
-                </div>
-              </label>
-            ))}
+            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+              Select Delivery Address
+            </label>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {savedAddresses.map((addr) => (
+                <label
+                  key={addr.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                    padding: "12px",
+                    borderRadius: "12px",
+                    border: selectedAddressId === addr.id ? "2px solid #1A6B47" : "1px solid #E5E7EB",
+                    background: selectedAddressId === addr.id ? "#E6F4EE" : "#FAFAFA",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="address"
+                    checked={selectedAddressId === addr.id}
+                    onChange={() => setSelectedAddressId(addr.id)}
+                    style={{ marginTop: "3px" }}
+                  />
+                  <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
+                </label>
+              ))}
+            </div>
             <button
               onClick={() => setShowNewAddress(true)}
-              style={{
-                color: "#166534",
-                background: "none",
-                border: "1.5px dashed #bbf7d0",
-                borderRadius: "10px",
-                padding: "12px",
-                width: "100%",
-                cursor: "pointer",
-                fontSize: "0.87rem",
-                fontWeight: 600,
-              }}
+              style={{ background: "none", border: "none", color: "#1A6B47", fontWeight: 700, fontSize: "0.82rem", marginTop: "8px", cursor: "pointer" }}
             >
-              + Add new address
+              + Add a new address
             </button>
           </div>
         )}
 
-        {showNewAddress && (
-          <div style={{ marginBottom: "16px" }}>
+        {/* New Address Input */}
+        {(showNewAddress || savedAddresses.length === 0) && (
+          <div>
+            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "6px", textTransform: "uppercase" }}>
+              Delivery Address *
+            </label>
             <textarea
-              placeholder="Your full delivery address (house no., street, area)"
               value={newAddressText}
               onChange={(e) => setNewAddressText(e.target.value)}
-              className="admin-input"
+              placeholder="House/Door No, Street Name, Area..."
               rows={3}
-              style={{ marginBottom: "10px", resize: "none" }}
-            />
-            <button
-              onClick={getLocation}
               style={{
                 width: "100%",
                 padding: "12px",
-                background: newAddressCoords ? "#f0fdf4" : "#166534",
-                color: newAddressCoords ? "#166534" : "#fff",
-                border: newAddressCoords ? "1.5px solid #bbf7d0" : "none",
-                borderRadius: "9999px",
-                fontWeight: 700,
+                borderRadius: "12px",
+                border: "1.5px solid var(--border)",
                 fontSize: "0.9rem",
-                cursor: "pointer",
-                marginBottom: "8px",
+                fontFamily: "var(--font)",
+                outline: "none",
+                marginBottom: "10px",
+                resize: "vertical",
               }}
-            >
-              {newAddressCoords
-                ? `Location pinned (${newAddressCoords.lat.toFixed(4)}, ${newAddressCoords.long.toFixed(4)})`
-                : "Use my current location"}
-            </button>
-            {locationError && (
-              <p style={{ color: "#dc2626", fontSize: "0.8rem" }}>{locationError}</p>
-            )}
-            {newAddressCoords && shopCoords && !isWithinRange() && (
-              <div
+            />
+
+            {/* Location detector button */}
+            <div style={{ marginBottom: "12px" }}>
+              <button
+                type="button"
+                onClick={getLocation}
                 style={{
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  borderRadius: "10px",
-                  padding: "12px",
-                  color: "#dc2626",
-                  fontSize: "0.85rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "9px 16px",
+                  background: newAddressCoords ? "#E6F4EE" : "#F3F4F6",
+                  color: newAddressCoords ? "#1A6B47" : "var(--text-primary)",
+                  border: newAddressCoords ? "1.5px solid #C3E6D0" : "1.5px solid #E5E7EB",
+                  borderRadius: "9999px",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
                 }}
               >
-                <strong>Outside our 3km delivery zone.</strong> Please call the shop to discuss options.
+                <MapPinIcon />
+                {newAddressCoords ? "✓ Location Pinned" : "Use my current location"}
+              </button>
+            </div>
+
+            {locationError && (
+              <p style={{ fontSize: "0.78rem", color: "#DC2626", marginBottom: "8px" }}>
+                {locationError}
+              </p>
+            )}
+
+            {savedAddresses.length > 0 && (
+              <button
+                onClick={() => setShowNewAddress(false)}
+                style={{ background: "none", border: "none", color: "#6B7280", fontSize: "0.82rem", cursor: "pointer" }}
+              >
+                ← Back to saved addresses
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Submit Button */}
+      <button
+        onClick={handleSubmit}
+        disabled={submitting}
+        style={{
+          width: "100%",
+          padding: "16px",
+          background: submitting ? "#A7F3D0" : "#1A6B47",
+          color: "#fff",
+          border: "none",
+          borderRadius: "9999px",
+          fontFamily: "var(--font)",
+          fontWeight: 700,
+          fontSize: "1rem",
+          cursor: submitting ? "not-allowed" : "pointer",
+          boxShadow: "0 6px 20px rgba(26,107,71,0.25)",
+          transition: "all 0.15s ease",
+        }}
+      >
+        {submitting ? "Placing Order…" : "Submit Order →"}
+      </button>
+
+      {/* 2-Step Onboarding Modal for First-Time / Logged-Out Users */}
+      {showOnboarding && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="onboarding-modal-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(4px)",
+            zIndex: 200,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "500px",
+              background: "#ffffff",
+              borderTopLeftRadius: "24px",
+              borderTopRightRadius: "24px",
+              padding: "24px",
+              boxShadow: "0 -8px 32px rgba(0,0,0,0.15)",
+              animation: "slideUp 0.25s ease-out",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 id="onboarding-modal-title" style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--font)" }}>
+                {onboardingStep === "details" ? "Step 1: Mobile Verification" : "Step 2: Enter OTP Code"}
+              </h3>
+              <button onClick={() => setShowOnboarding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }} aria-label="Close modal">
+                <CloseIcon />
+              </button>
+            </div>
+
+            {otpError && (
+              <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: "12px", fontSize: "0.82rem", fontWeight: 600, marginBottom: "14px" }}>
+                {otpError}
+              </div>
+            )}
+
+            {onboardingStep === "details" ? (
+              <div>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "16px" }}>
+                  Please verify your mobile number to complete your order placement.
+                </p>
+                <div style={{ marginBottom: "16px" }}>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", marginBottom: "6px" }}>
+                    Mobile Phone Number *
+                  </label>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <span style={{ padding: "12px 14px", background: "#F3F4F6", borderRadius: "12px", fontWeight: 700, fontSize: "0.95rem" }}>
+                      +91
+                    </span>
+                    <input
+                      ref={onboardPhoneInputRef}
+                      type="tel"
+                      value={onboardPhone}
+                      onChange={(e) => setOnboardPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      placeholder="98765 43210"
+                      maxLength={10}
+                      style={{
+                        flex: 1,
+                        padding: "12px 14px",
+                        borderRadius: "12px",
+                        border: "1.5px solid var(--border)",
+                        fontSize: "1rem",
+                        fontWeight: 600,
+                        fontFamily: "var(--font)",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={handleSendOtp}
+                  disabled={otpLoading}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    background: "#1A6B47",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "9999px",
+                    fontWeight: 700,
+                    fontSize: "0.95rem",
+                    cursor: otpLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {otpLoading ? "Sending OTP…" : "Send Verification Code →"}
+                </button>
+              </div>
+            ) : (
+              <div>
+                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "16px" }}>
+                  Enter the 6-digit OTP code sent to <strong>+91 {onboardPhone}</strong>.
+                </p>
+                <input
+                  ref={onboardOtpInputRef}
+                  type="text"
+                  value={onboardOtp}
+                  onChange={(e) => setOnboardOtp(e.target.value)}
+                  placeholder="Enter 6-digit code"
+                  maxLength={6}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    borderRadius: "14px",
+                    border: "2px solid #1A6B47",
+                    fontSize: "1.2rem",
+                    fontWeight: 700,
+                    textAlign: "center",
+                    letterSpacing: "0.3em",
+                    fontFamily: "var(--font)",
+                    outline: "none",
+                    marginBottom: "16px",
+                  }}
+                />
+
+                <button
+                  onClick={handleVerifyOtp}
+                  disabled={otpLoading}
+                  style={{
+                    width: "100%",
+                    padding: "14px",
+                    background: "#1A6B47",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "9999px",
+                    fontWeight: 700,
+                    fontSize: "0.95rem",
+                    cursor: otpLoading ? "not-allowed" : "pointer",
+                    marginBottom: "12px",
+                  }}
+                >
+                  {otpLoading ? "Verifying & Placing Order…" : "Verify OTP & Complete Order →"}
+                </button>
+
+                <div style={{ textAlign: "center" }}>
+                  <button
+                    onClick={handleSendOtp}
+                    disabled={otpLoading}
+                    style={{ background: "none", border: "none", color: "#1A6B47", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer" }}
+                  >
+                    Resend Code
+                  </button>
+                </div>
               </div>
             )}
           </div>
-        )}
-
-        {/* Submit error */}
-        {submitError && (
-          <div
-            style={{
-              background: "#fef2f2",
-              border: "1px solid #fecaca",
-              borderRadius: "10px",
-              padding: "12px",
-              color: "#dc2626",
-              fontSize: "0.85rem",
-              marginBottom: "16px",
-            }}
-          >
-            {submitError}
-          </div>
-        )}
-      </div>
-
-      {/* Sticky submit bar */}
-      <div className="sticky-bar">
-        <button
-          className="btn-accent"
-          style={{ flex: 1, justifyContent: "center" }}
-          onClick={handleSubmit}
-          disabled={submitting}
-        >
-          {submitting ? "Placing order…" : "Place Order for Tomorrow"}
-        </button>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

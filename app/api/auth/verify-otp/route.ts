@@ -3,7 +3,7 @@ import { getAdminAuth } from "@/lib/firebase-admin";
 import { normalizeIndianMobile } from "@/lib/otp";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
-import { eq } from "drizzle-orm";
+
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
 
 const SESSION_DURATION_DAYS = 75;
@@ -27,11 +27,25 @@ const MAX_AUTH_AGE_SECONDS = 5 * 60;
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { phone?: string; idToken?: string };
+    let body: { phone?: string; idToken?: string; name?: string };
     try {
       body = await req.json();
+      if (typeof body !== "object" || body === null || Array.isArray(body)) {
+        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      }
     } catch {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return NextResponse.json({ error: "Invalid name format" }, { status: 400 });
+    }
+    const submittedName = body.name?.trim() || undefined;
+    if (submittedName && submittedName.length > 100) {
+      return NextResponse.json(
+        { error: "Name cannot exceed 100 characters" },
+        { status: 400 }
+      );
     }
 
     const phone = body.phone?.trim() ?? "";
@@ -85,22 +99,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 4. Upsert user ────────────────────────────────────────────────────────
+    // ── 4. Upsert user (single query) ────────────────────────────────────────
     const [upsertedUser] = await db
       .insert(users)
-      .values({ phone_number: expectedPhone })
-      .onConflictDoNothing({ target: users.phone_number })
+      .values({
+        phone_number: expectedPhone,
+        name: submittedName || null,
+      })
+      .onConflictDoUpdate({
+        target: users.phone_number,
+        set: submittedName ? { name: submittedName } : { phone_number: expectedPhone },
+      })
       .returning({ id: users.id });
 
-    let userId = upsertedUser?.id;
-    if (!userId) {
-      const [existing] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.phone_number, expectedPhone))
-        .limit(1);
-      userId = existing?.id;
-    }
+    const userId = upsertedUser?.id;
 
     if (!userId) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });

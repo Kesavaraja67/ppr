@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderList } from "./OrderListProvider";
 
@@ -84,6 +84,25 @@ function PhoneIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function LaptopIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+      <line x1="2" y1="20" x2="22" y2="20" />
+    </svg>
+  );
+}
+
+function ShareSquareIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <polyline points="16 6 12 2 8 6" />
+      <line x1="12" y1="2" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 function PinIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -98,6 +117,15 @@ function CloseIcon() {
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, marginTop: "2px" }}>
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }
@@ -127,16 +155,6 @@ function OrderIconWhite() {
       <circle cx="9" cy="21" r="1" />
       <circle cx="20" cy="21" r="1" />
       <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-    </svg>
-  );
-}
-
-// Small gear icon for the staff-only admin shortcut in the header
-function SettingsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.65 1.65 0 0 0 15 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 8.6 15a1.65 1.65 0 0 0-1.82-.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 15 8.6a1.65 1.65 0 0 0 1.82.33l.06-.06a2 2 0 1 1 2.83 2.83z" />
     </svg>
   );
 }
@@ -323,24 +341,33 @@ function OrderListIcon({ count }: { count: number }) {
 }
 
 // ── Product Card ──────────────────────────────────────────────────────────────
-function ProductCard({ veg }: { veg: Vegetable }) {
+function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
   const { setQty, getQty } = useOrderList();
   const qty = getQty(veg.id);
   const color = CARD_COLORS[hashIndex(veg.id)];
 
+  const [overrideSrc, setOverrideSrc] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
+
+  const imgSrc = overrideSrc ?? veg.image_url;
+
   // kg items step by 0.5; packet/dozen/piece/bunch/bag step by whole 1
   const step = veg.unit === "kg" ? 0.5 : 1;
 
-  const increment = () =>
+  const increment = () => {
+    if (!shopOpen) return;
     setQty(veg.id, parseFloat((qty + step).toFixed(1)), {
       name_en: veg.name_en,
       name_ta: veg.name_ta,
       unit: veg.unit,
       image_url: veg.image_url,
     });
+  };
 
-  const decrement = () =>
+  const decrement = () => {
+    if (!shopOpen) return;
     setQty(veg.id, parseFloat(Math.max(0, qty - step).toFixed(1)));
+  };
 
   return (
     <div
@@ -377,13 +404,20 @@ function ProductCard({ veg }: { veg: Vegetable }) {
           }}
         />
 
-        {veg.image_url ? (
+        {imgSrc && !imgError ? (
           <Image
-            src={veg.image_url}
+            src={imgSrc}
             alt={veg.name_en}
             width={110}
             height={110}
             priority={true}
+            onError={() => {
+              if (imgSrc.endsWith(".png")) {
+                setOverrideSrc(imgSrc.replace(".png", ".jpg"));
+              } else {
+                setImgError(true);
+              }
+            }}
             style={{
               objectFit: "contain",
               maxHeight: "110px",
@@ -522,17 +556,59 @@ function isWithinOrderWindow(): boolean {
   return h >= 8 && h < 20;
 }
 
+const emptySubscribe = () => () => {};
+
+function useIsStandalone(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => {
+      if (typeof window === "undefined") return false;
+      return (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (navigator as any).standalone === true
+      );
+    },
+    () => false
+  );
+}
+
+function useDeviceType(): "desktop" | "android" | "ios" | "other" {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => {
+      if (typeof window === "undefined") return "other";
+      const ua = navigator.userAgent.toLowerCase();
+      const isIos =
+        /iphone|ipad|ipod/.test(ua) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isAndroid = /android/.test(ua);
+      const isMobile = isIos || isAndroid || /mobile/.test(ua);
+      if (isIos) return "ios";
+      if (isAndroid) return "android";
+      if (!isMobile) return "desktop";
+      return "other";
+    },
+    () => "other"
+  );
+}
+
 // ── Main Catalog ──────────────────────────────────────────────────────────────
 export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
   const { totalCount } = useOrderList();
 
   type Category = "all" | "vegetable" | "fruit";
+
+
   const [category, setCategory] = useState<Category>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [showIosBanner, setShowIosBanner] = useState(false);
+  const deviceType = useDeviceType();
+  const isStandalone = useIsStandalone();
+  const [showIosModal, setShowIosModal] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
-  const [showAndroidInstall, setShowAndroidInstall] = useState(false);
+  const [canInstall, setCanInstall] = useState(false);
+
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
   const [isScrolled, setIsScrolled] = useState(false);
 
@@ -555,38 +631,34 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Android PWA install
+
+
+  // PWA install listener (runs only when not standalone)
   useEffect(() => {
+    if (isStandalone) return;
+
     const handler = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowAndroidInstall(true);
+      setCanInstall(true);
     };
+
     window.addEventListener("beforeinstallprompt", handler);
     return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  }, [isStandalone]);
 
-  // iOS install banner
-  useEffect(() => {
-    const isIos =
-      /iphone|ipad|ipod/i.test(navigator.userAgent) &&
-      !(
-        navigator.userAgent.includes("CriOS") ||
-        navigator.userAgent.includes("FxiOS")
-      );
-    const isStandalone = window.matchMedia("(display-mode: standalone)").matches;
-    if (isIos && !isStandalone) {
-      const timer = setTimeout(() => setShowIosBanner(true), 3000);
-      return () => clearTimeout(timer);
+  const handleInstallClick = async () => {
+    if (deviceType === "ios") {
+      setShowIosModal(true);
+      return;
     }
-  }, []);
 
-  const handleAndroidInstall = async () => {
-    if (!deferredPrompt) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (deferredPrompt as any).prompt();
-    setShowAndroidInstall(false);
-    setDeferredPrompt(null);
+    if (deferredPrompt) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (deferredPrompt as any).prompt();
+      setCanInstall(false);
+      setDeferredPrompt(null);
+    }
   };
 
   // Filter + search
@@ -634,26 +706,44 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            maxHeight: isScrolled ? "0px" : "60px",
+            maxHeight: isScrolled ? "0px" : "68px",
             opacity: isScrolled ? 0 : 1,
             marginBottom: isScrolled ? "0px" : "14px",
             overflow: "hidden",
             transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img 
-              src="/logo.png" 
-              alt="P.P.R. Fruits & Vegetables Logo" 
-              style={{ 
-                height: "48px", 
-                width: "auto", 
-                objectFit: "contain",
+          <a
+            href="/manage"
+            aria-label="Staff login"
+            style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none", color: "inherit" }}
+          >
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "14px",
+                overflow: "hidden",
                 flexShrink: 0,
-                display: "block",
-              }} 
-            />
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#ffffff",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src="/logo.png?v=6" 
+                alt="P.P.R. Fruits & Vegetables Logo" 
+                style={{ 
+                  width: "100%", 
+                  height: "100%", 
+                  objectFit: "cover",
+                  display: "block",
+                }} 
+              />
+            </div>
             <div>
               <p
                 style={{
@@ -682,42 +772,32 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                 P.P.R. Fruits &amp; Vegetables
               </h1>
             </div>
-          </div>
+          </a>
 
           <div style={{ display: "flex", alignItems: "center", gap: "8px", alignSelf: "center" }}>
-            {showAndroidInstall && (
+            {!isStandalone && (canInstall || deviceType === "ios") && (
               <button
-                onClick={handleAndroidInstall}
+                onClick={handleInstallClick}
+                aria-label="Install App"
                 style={{
-                  fontSize: "0.72rem",
-                  padding: "7px 12px",
+                  fontSize: "0.74rem",
+                  padding: "7px 14px",
                   background: "#E6F4EE",
                   color: "#1A6B47",
                   border: "1.5px solid #C3E6D0",
                   borderRadius: "9999px",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   cursor: "pointer",
                   fontFamily: "var(--font)",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
                 }}
               >
-                Install
+                {deviceType === "desktop" ? <LaptopIcon size={14} /> : <PhoneIcon size={13} />}
+                {deviceType === "desktop" ? "Install App" : "Install"}
               </button>
             )}
-            {/* Staff-only admin shortcut */}
-            <a
-              href="/manage"
-              aria-label="Staff login"
-              style={{
-                color: "var(--text-muted)",
-                opacity: 0.45,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "6px",
-              }}
-            >
-              <SettingsIcon />
-            </a>
             <OrderListIcon count={totalCount} />
           </div>
         </div>
@@ -789,33 +869,58 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
         ))}
       </div>
 
-      {/* ── Shop closed banner ────────────────────────────────────────────── */}
+      {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
       {!shopOpen && (
         <div
           role="status"
           aria-live="polite"
           style={{
-            margin: "0 16px 4px",
-            padding: "12px 16px",
-            background: "#FFF7ED",
-            border: "1.5px solid #FED7AA",
-            borderRadius: "12px",
+            margin: "0 16px 12px",
+            padding: "14px 16px",
+            background: "#FFF9F0",
+            border: "1.5px solid #FDE68A",
+            borderRadius: "16px",
             display: "flex",
-            alignItems: "center",
-            gap: "10px",
+            alignItems: "flex-start",
+            gap: "12px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
           }}
         >
-          <span style={{ fontSize: "1.1rem" }} aria-hidden="true">🕗</span>
+          <ClockIcon />
           <div>
-            <p style={{ fontWeight: 700, fontSize: "0.83rem", color: "#92400E", fontFamily: "var(--font)" }}>
-              Shop closed for ordering
+            <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#92400E", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+              Orders accepted 8 AM – 8 PM only. Please come back during shop hours.
             </p>
-            <p style={{ fontSize: "0.75rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "1px" }}>
-              Orders accepted between 8 AM – 8 PM. You can browse the catalog now.
+            <p style={{ fontSize: "0.78rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+              காலை 8 மணி முதல் இரவு 8 மணி வரை மட்டும் ஆர்டர் ஏற்றுக்கொள்ளப்படும். கடை நேரத்தில் மீண்டும் வருகை தரவும்.
             </p>
           </div>
         </div>
       )}
+
+      {/* ── Freshness Positioning Banner (Bilingual) ────────────────────── */}
+      <div
+        style={{
+          margin: "0 16px 8px",
+          padding: "14px 16px",
+          background: "#E6F4EE",
+          border: "1.5px solid #C3E6D0",
+          borderRadius: "16px",
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "12px",
+        }}
+      >
+        <LeafIcon size={20} color="#1A6B47" />
+        <div>
+          <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1A6B47", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+            Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+            தினமும் புதிதாக வாங்கப்படுகிறது — சேமிக்கப்படுவதில்லை. உங்கள் ஆர்டருக்காக வாங்குகிறோம், கிடங்கிலிருந்து அல்ல.
+          </p>
+        </div>
+      </div>
 
       {/* ── Section Header ──────────────────────────────────────────────── */}
       <div
@@ -935,7 +1040,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             </p>
           </div>
         ) : (
-          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} />)
+          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} shopOpen={shopOpen} />)
         )}
       </main>
 
@@ -1042,7 +1147,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                       letterSpacing: "-0.01em",
                     }}
                   >
-                    Delivery areas
+                    Delivery Coverage &amp; Policy
                   </p>
                   <p
                     style={{
@@ -1051,9 +1156,46 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                       color: "var(--text-muted)",
                     }}
                   >
-                    We deliver to these neighbourhoods
+                    {config?.delivery_radius_km ?? 3}km radius delivery area
                   </p>
                 </div>
+              </div>
+
+              <div
+                style={{
+                  background: "#ffffff",
+                  padding: "12px 14px",
+                  borderRadius: "14px",
+                  border: "1px solid #E5E7EB",
+                  marginBottom: "14px",
+                }}
+              >
+                <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+                  We deliver within {config?.delivery_radius_km ?? 3}km. For larger orders or delivery outside this range, please call us directly.
+                </p>
+                <p style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+                  நாங்கள் {config?.delivery_radius_km ?? 3} கிமீ சுற்றளவிற்குள் மட்டுமே டெலிவரி செய்கிறோம். பெரிய ஆர்டர்கள் அல்லது இதற்கு அப்பால் டெலிவரி தேவைப்பட்டால், நேரடியாக எங்களை அழைக்கவும்.
+                </p>
+                <a
+                  href={`tel:${config?.phone_number || "9443721544"}`}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    marginTop: "10px",
+                    background: "#E6F4EE",
+                    color: "#1A6B47",
+                    padding: "6px 14px",
+                    borderRadius: "9999px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    fontFamily: "var(--font)",
+                    textDecoration: "none",
+                    border: "1px solid #C3E6D0",
+                  }}
+                >
+                  <PhoneIcon size={14} /> Call Shop: {config?.phone_number || "94437 21544"}
+                </a>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
                 {areasToDisplay.map((area) => (
@@ -1119,57 +1261,6 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
         </p>
       </footer>
 
-      {/* ── iOS Install Banner ────────────────────────────────────────────── */}
-      {showIosBanner && (
-        <div className="ios-banner">
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "8px",
-            }}
-          >
-            <p
-              style={{
-                fontWeight: 700,
-                fontSize: "0.92rem",
-                fontFamily: "var(--font)",
-              }}
-            >
-              Add to Home Screen
-            </p>
-            <button
-              onClick={() => setShowIosBanner(false)}
-              aria-label="Close banner"
-              style={{
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                color: "var(--text-muted)",
-                padding: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <CloseIcon />
-            </button>
-          </div>
-          <p
-            style={{
-              fontSize: "0.8rem",
-              color: "var(--text-secondary)",
-              fontFamily: "var(--font)",
-              lineHeight: 1.5,
-            }}
-          >
-            Tap <strong>Share</strong> then{" "}
-            <strong>&quot;Add to Home Screen&quot;</strong> to install.
-          </p>
-        </div>
-      )}
-
       {/* ── Sticky Order Bar ─────────────────────────────────────────────── */}
       {totalCount > 0 && (
         <div className="sticky-bar">
@@ -1199,6 +1290,98 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               {totalCount} {totalCount === 1 ? "item" : "items"}
             </span>
           </button>
+        </div>
+      )}
+      {/* ── iOS PWA Installation Guide Modal ────────────────────────────────────── */}
+      {showIosModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(4px)",
+            zIndex: 300,
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "500px",
+              background: "#ffffff",
+              borderTopLeftRadius: "24px",
+              borderTopRightRadius: "24px",
+              padding: "24px",
+              boxShadow: "0 -8px 32px rgba(0,0,0,0.15)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <PhoneIcon size={18} />
+                <h3 style={{ fontSize: "1.05rem", fontWeight: 700, fontFamily: "var(--font)", color: "var(--text-primary)" }}>
+                  Install on iPhone / iPad
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowIosModal(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280", padding: "4px" }}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "16px", lineHeight: 1.4 }}>
+              Follow these simple steps in Safari to install PPR Fruits &amp; Vegetables on your home screen:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#F9FAFB", padding: "12px", borderRadius: "14px", border: "1px solid #E5E7EB" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#E6F4EE", color: "#1A6B47", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>
+                  1
+                </div>
+                <p style={{ fontSize: "0.88rem", color: "var(--text-primary)", fontWeight: 600 }}>
+                  Tap the <ShareSquareIcon size={16} /> <strong>Share</strong> icon in Safari bottom bar.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#F9FAFB", padding: "12px", borderRadius: "14px", border: "1px solid #E5E7EB" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#E6F4EE", color: "#1A6B47", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>
+                  2
+                </div>
+                <p style={{ fontSize: "0.88rem", color: "var(--text-primary)", fontWeight: 600 }}>
+                  Scroll down and tap <strong>Add to Home Screen</strong>.
+                </p>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", background: "#F9FAFB", padding: "12px", borderRadius: "14px", border: "1px solid #E5E7EB" }}>
+                <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "#E6F4EE", color: "#1A6B47", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>
+                  3
+                </div>
+                <p style={{ fontSize: "0.88rem", color: "var(--text-primary)", fontWeight: 600 }}>
+                  Tap <strong>Add</strong> in the top right corner.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowIosModal(false)}
+              style={{
+                width: "100%",
+                padding: "14px",
+                background: "#1A6B47",
+                color: "#fff",
+                border: "none",
+                borderRadius: "9999px",
+                fontWeight: 700,
+                fontSize: "0.95rem",
+                cursor: "pointer",
+              }}
+            >
+              Got it
+            </button>
+          </div>
         </div>
       )}
     </div>

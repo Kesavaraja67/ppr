@@ -63,7 +63,7 @@ async function main() {
       // NGGO Colony, Coimbatore (confirmed via Google Maps on 2026-07-31)
       lat: "11.0915615",
       long: "76.9452854",
-      delivery_radius_km: "5",
+      delivery_radius_km: "3",
       free_delivery_threshold: "300",
       covered_areas: [
         "Thudiyalur",

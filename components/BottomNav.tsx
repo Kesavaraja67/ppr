@@ -111,10 +111,10 @@ export default function BottomNav() {
       isActive: pathname === "/shop-details",
     },
     {
-      href: "/login",
+      href: "/profile",
       label: "Account",
       icon: AccountIcon,
-      isActive: pathname === "/login",
+      isActive: pathname === "/profile" || pathname === "/login",
     },
   ];
 

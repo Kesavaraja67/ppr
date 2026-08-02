@@ -68,7 +68,7 @@ export default async function CatalogPage() {
               phone_number: "8870187248",
               lat: 11.0915615,
               long: 76.9452854,
-              delivery_radius_km: 5,
+              delivery_radius_km: 3,
               covered_areas: DEFAULT_COVERED_AREAS,
             }
       }

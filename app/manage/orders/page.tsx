@@ -26,6 +26,8 @@ interface Order {
   user_phone: string | null;
   user_name: string | null;
   address_text: string | null;
+  lat: number | null;
+  long: number | null;
   items: OrderItem[];
 }
 
@@ -46,9 +48,19 @@ const STATUS_META: Record<string, { label: string; bg: string; color: string }> 
 };
 
 const STATUS_TRANSITIONS: Record<string, { next: string; label: string }[]> = {
-  priced:           [{ next: "out_for_delivery", label: "Mark Out for Delivery" }],
-  out_for_delivery: [{ next: "delivered",        label: "Mark Delivered" }],
-  pending:          [{ next: "cancelled",        label: "Cancel Order" }],
+  pending:          [
+    { next: "cancelled", label: "Cancel Order" }
+  ],
+  priced:           [
+    { next: "out_for_delivery", label: "Mark Out for Delivery" },
+    { next: "cancelled", label: "Cancel Order" }
+  ],
+  out_for_delivery: [
+    { next: "delivered", label: "Mark Delivered" },
+    { next: "cancelled", label: "Cancel Order" }
+  ],
+  delivered:        [],
+  cancelled:        [],
 };
 
 // ── Web Audio chime — synthesised, no external file needed ────────────────────
@@ -75,6 +87,23 @@ function playNewOrderChime() {
   } catch {
     // AudioContext unavailable — silent fail
   }
+}
+
+function PhoneCallIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.41 2 2 0 0 1 3.6 1.21h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9a16 16 0 0 0 6 6l.91-1.91a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 15z" />
+    </svg>
+  );
+}
+
+function MapPinIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
+      <circle cx="12" cy="10" r="3" />
+    </svg>
+  );
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -185,7 +214,6 @@ export default function AdminOrdersPage() {
     );
   }
 
-  const now = new Date();
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowLabel = tomorrow.toLocaleDateString("en-IN", {
@@ -201,7 +229,7 @@ export default function AdminOrdersPage() {
 
   return (
     <div className="page-content" style={{ padding: "16px" }}>
-      {/* Keyframe for new-order highlight pulse */}
+      {/* Keyframe for new-order highlight pulse & tablet layout */}
       <style>{`
         @keyframes newOrderPulse {
           0%   { box-shadow: 0 0 0 0 rgba(22,101,52,0.45); border-color: #166534; background: #f0fdf4; }
@@ -209,6 +237,16 @@ export default function AdminOrdersPage() {
           100% { box-shadow: 0 0 0 0 rgba(22,101,52,0);   border-color: #e5e7eb; background: #fff; }
         }
         .order-card--new { animation: newOrderPulse 5s ease-out forwards; }
+        .admin-orders-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+        @media (min-width: 768px) {
+          .admin-orders-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+        }
       `}</style>
 
       {/* Header */}
@@ -283,10 +321,8 @@ export default function AdminOrdersPage() {
           No orders for tomorrow yet.
         </div>
       ) : view === "orders" ? (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div className="admin-orders-grid">
           {orders.map((order) => {
-            const cutoff = new Date(order.cancellable_until);
-            const stillCancellable = now < cutoff;
             const transitions = STATUS_TRANSITIONS[order.status] ?? [];
             const isUpdating = updatingId === order.id;
             const isNew = newOrderIds.has(order.id);
@@ -298,43 +334,85 @@ export default function AdminOrdersPage() {
                 style={{
                   background: "#fff",
                   border: `1.5px solid ${order.status === "delivered" ? "#d1fae5" : order.status === "out_for_delivery" ? "#fde68a" : "#e5e7eb"}`,
-                  borderRadius: "12px",
-                  padding: "14px 16px",
+                  borderRadius: "14px",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
                 }}
               >
-                {/* Order header — customer name + phone + status */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
-                  <div>
-                    <p style={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                      {order.user_name ?? order.user_phone ?? "Unknown"}
-                    </p>
-                    {order.user_name && (
-                      <p style={{ fontSize: "0.78rem", color: "#6b7280" }}>{order.user_phone}</p>
-                    )}
+                {/* Order header — customer name + phone + Call Customer button + status */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <p style={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                          {order.user_name ?? order.user_phone ?? "Unknown"}
+                        </p>
+                        {order.user_phone && (
+                          <a
+                            href={`tel:${order.user_phone}`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              background: "#E6F4EE",
+                              color: "#1A6B47",
+                              padding: "4px 10px",
+                              borderRadius: "9999px",
+                              fontSize: "0.75rem",
+                              fontWeight: 700,
+                              textDecoration: "none",
+                              border: "1px solid #C3E6D0",
+                            }}
+                          >
+                            <PhoneCallIcon /> Call
+                          </a>
+                        )}
+                      </div>
+                      {order.user_name && (
+                        <p style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: "2px" }}>{order.user_phone}</p>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                      {isNew && (
+                        <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#166534", background: "#dcfce7", borderRadius: "9999px", padding: "2px 8px" }}>
+                          NEW
+                        </span>
+                      )}
+                      <StatusBadge status={order.status} />
+                    </div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
-                    {isNew && (
-                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#166534", background: "#dcfce7", borderRadius: "9999px", padding: "2px 8px" }}>
-                        NEW
-                      </span>
-                    )}
-                    <StatusBadge status={order.status} />
-                  </div>
-                </div>
 
-                {/* Cancellable warning for pending */}
-                {order.status === "pending" && stillCancellable && (
-                  <p style={{ fontSize: "0.72rem", color: "#92400e", background: "#fef3c7", borderRadius: "6px", padding: "4px 8px", marginBottom: "8px", display: "inline-block" }}>
-                    Can cancel until {cutoff.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })}
-                  </p>
-                )}
-
-                {/* Address */}
-                {order.address_text && (
-                  <p style={{ fontSize: "0.78rem", color: "#6b7280", marginBottom: "10px" }}>
-                    {order.address_text}
-                  </p>
-                )}
+                  {/* Address & Google Maps button */}
+                  {order.address_text && (
+                    <div style={{ marginBottom: "12px", background: "#F9FAFB", padding: "10px", borderRadius: "10px", border: "1px solid #F3F4F6" }}>
+                      <p style={{ fontSize: "0.8rem", color: "#374151", lineHeight: 1.4, marginBottom: "6px" }}>
+                        {order.address_text}
+                      </p>
+                      {order.lat && order.long && (
+                        <a
+                          href={`https://www.google.com/maps?q=${order.lat},${order.long}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            background: "#ffffff",
+                            color: "#166534",
+                            padding: "4px 10px",
+                            borderRadius: "9999px",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            textDecoration: "none",
+                            border: "1px solid #C3E6D0",
+                          }}
+                        >
+                          <MapPinIcon /> Open in Google Maps ↗
+                        </a>
+                      )}
+                    </div>
+                  )}
 
                 {/* Items */}
                 <div style={{ borderTop: "1px solid #f3f4f6", paddingTop: "10px", marginBottom: "12px" }}>

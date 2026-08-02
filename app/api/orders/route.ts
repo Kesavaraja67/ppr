@@ -104,8 +104,8 @@ export async function POST(req: NextRequest) {
       .values({
         user_id: session.userId,
         full_address: body.new_address.full_address,
-        lat: String(body.new_address.lat),
-        long: String(body.new_address.long),
+        lat: body.new_address.lat,
+        long: body.new_address.long,
         is_within_range: true,
       })
       .returning({ id: addresses.id });

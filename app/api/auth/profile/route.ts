@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest) {
   let body: { name?: string; address_id?: string; full_address?: string };
   try {
     body = await req.json();
-    if (typeof body !== "object" || body === null) {
+    if (typeof body !== "object" || body === null || Array.isArray(body)) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
   } catch {

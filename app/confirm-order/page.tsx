@@ -199,21 +199,35 @@ export default function ConfirmOrderPage() {
           setSubmitError("Please tap 'Use my location' to pin your delivery location.");
           return false;
         }
-        const withinRange = shopCoords ? isWithinRange() : true;
-        if (!withinRange) {
+        // Immediate client-side UX feedback
+        if (shopCoords && newAddressCoords && !isWithinRange()) {
           setSubmitError(
-            `Sorry, your location is outside our ${shopCoords?.radius ?? 3}km delivery zone. Please call the shop at 94437 21544.`
+            `Sorry, your location is outside our ${shopCoords.radius}km delivery zone. Please call the shop at 94437 21544.`
           );
           return false;
         }
-        addressPayload = {
-          new_address: {
-            full_address: newAddressText.trim(),
-            lat: newAddressCoords.lat,
-            long: newAddressCoords.long,
-            is_within_range: true,
-          },
-        };
+
+        // Call server-side POST /api/addresses for address creation and Haversine radius validation
+        try {
+          const addrRes = await fetch("/api/addresses", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              full_address: newAddressText.trim(),
+              lat: newAddressCoords.lat,
+              long: newAddressCoords.long,
+            }),
+          });
+          const addrData = await addrRes.json();
+          if (!addrRes.ok) {
+            setSubmitError(addrData.error ?? "Failed to save delivery address.");
+            return false;
+          }
+          addressPayload = { address_id: addrData.address.id };
+        } catch {
+          setSubmitError("Failed to save delivery address. Please try again.");
+          return false;
+        }
       } else {
         if (!selectedAddressId) {
           setSubmitError("Please select a delivery address.");

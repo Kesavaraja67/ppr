@@ -3,19 +3,7 @@ import { db } from "@/lib/db";
 import { orders, order_items, addresses, vegetables, users, shop_config } from "@/drizzle/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCustomerSession } from "@/lib/customer-auth";
-
-/** Haversine great-circle distance in km. */
-function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+import { haversineDistance } from "@/lib/haversine";
 
 /** True when current IST time is within the 8 AM–8 PM ordering window. */
 function isWithinOrderWindow(): boolean {
@@ -81,7 +69,7 @@ export async function POST(req: NextRequest) {
     const [shopConf] = await db.select().from(shop_config).limit(1);
     const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
     const withinRange = shopConf
-      ? haversineKm(
+      ? haversineDistance(
           body.new_address.lat,
           body.new_address.long,
           Number(shopConf.lat),

@@ -1,33 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getAdminAuth } from "@/lib/firebase-admin";
-import { normalizeIndianMobile } from "@/lib/otp";
+import { normalizeIndianMobile } from "@/lib/auth-helpers";
+import { verifyMsg91Otp } from "@/lib/msg91";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
-
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
 
 const SESSION_DURATION_DAYS = 75;
 
-// ID tokens must be issued within the last 5 minutes to be accepted.
-// This prevents replay attacks using tokens captured from old sign-in events.
-const MAX_AUTH_AGE_SECONDS = 5 * 60;
-
 /**
  * POST /api/auth/verify-otp
  *
- * Body: { phone: "9876543210", idToken: "<Firebase ID token>" }
- *
- * Flow:
- *  1. Validate phone format.
- *  2. Verify the Firebase ID token with the Admin SDK (revocation checked).
- *  3. Reject tokens older than 5 minutes.
- *  4. Assert the token's phone_number matches the submitted phone.
- *  5. Upsert the user row (first-time login creates the account).
- *  6. Issue a session cookie.
+ * Body: { phone: "9876543210", otp: "123456", name?: string }
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { phone?: string; idToken?: string; name?: string };
+    let body: { phone?: string; otp?: string; name?: string };
     try {
       body = await req.json();
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -49,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     const phone = body.phone?.trim() ?? "";
-    const idToken = body.idToken?.trim() ?? "";
+    const otp = body.otp?.trim() ?? "";
 
     const cleaned = normalizeIndianMobile(phone);
 
@@ -60,46 +47,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!idToken) {
+    if (!otp) {
       return NextResponse.json(
-        { error: "Firebase ID token is required" },
+        { error: "OTP code is required" },
         { status: 400 }
       );
     }
 
-    // ── 1. Verify Firebase ID token (with revocation check) ───────────────────
-    let decodedToken: Awaited<ReturnType<ReturnType<typeof getAdminAuth>["verifyIdToken"]>>;
-    try {
-      decodedToken = await getAdminAuth().verifyIdToken(idToken, /* checkRevoked= */ true);
-    } catch (err) {
-      console.error("Firebase verifyIdToken error:", err);
+    // ── 1. Verify OTP with MSG91 ──────────────────────────────────────────────
+    const verifyResult = await verifyMsg91Otp(cleaned, otp);
+    if (!verifyResult.success) {
       return NextResponse.json(
-        { error: "Invalid or expired verification token. Please try again." },
+        { error: verifyResult.error ?? "Invalid or expired OTP code" },
         { status: 401 }
       );
     }
 
-    // ── 2. Reject stale tokens (older than 5 minutes) ─────────────────────────
-    const authAge = Math.floor(Date.now() / 1000) - (decodedToken.auth_time ?? 0);
-    if (authAge > MAX_AUTH_AGE_SECONDS) {
-      return NextResponse.json(
-        { error: "Verification token has expired. Please request a new OTP." },
-        { status: 401 }
-      );
-    }
-
-    // ── 3. Assert phone number matches ────────────────────────────────────────
+    // ── 2. Upsert user in database ────────────────────────────────────────────
     const expectedPhone = `+91${cleaned}`;
-    if (decodedToken.phone_number !== expectedPhone) {
-      // Log a generic mismatch without exposing PII (phone numbers)
-      console.error("Phone mismatch between token and submitted phone number");
-      return NextResponse.json(
-        { error: "Phone number mismatch. Please try again." },
-        { status: 401 }
-      );
-    }
-
-    // ── 4. Upsert user (single query) ────────────────────────────────────────
     const [upsertedUser] = await db
       .insert(users)
       .values({
@@ -118,7 +83,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
     }
 
-    // ── 5. Issue session cookie ───────────────────────────────────────────────
+    // ── 3. Issue customer session cookie ──────────────────────────────────────
     const token = await createCustomerSession(userId);
 
     const response = NextResponse.json({ success: true, userId });
@@ -134,7 +99,7 @@ export async function POST(req: NextRequest) {
   } catch (globalErr: unknown) {
     console.error("verify-otp unhandled server error:", globalErr);
     return NextResponse.json(
-      { error: "Server error during verification. Please check Vercel environment variables." },
+      { error: "Server error during verification. Please check server logs." },
       { status: 500 }
     );
   }

@@ -190,10 +190,12 @@ export default function MyOrdersPage() {
 
                 {order.total_amount && (
                   <div style={{ fontSize: "0.85rem", color: "var(--text-primary)", background: "#F9FAFB", padding: "10px 12px", borderRadius: "12px", marginBottom: "12px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                      <span style={{ color: "var(--text-muted)" }}>Subtotal:</span>
-                      <span>₹{Number(order.subtotal).toFixed(0)}</span>
-                    </div>
+                    {order.subtotal != null && (
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ color: "var(--text-muted)" }}>Subtotal:</span>
+                        <span>₹{Number(order.subtotal).toFixed(0)}</span>
+                      </div>
+                    )}
                     {Number(order.delivery_charge) > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
                         <span style={{ color: "var(--text-muted)" }}>Delivery charge:</span>

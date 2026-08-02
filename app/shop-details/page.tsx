@@ -97,6 +97,7 @@ export default function ShopDetailsPage() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
           <div style={{ width: "52px", height: "52px", borderRadius: "14px", overflow: "hidden", flexShrink: 0 }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/logo.png?v=6" alt="PPR Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </div>
           <div>

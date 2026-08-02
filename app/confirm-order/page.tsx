@@ -76,6 +76,7 @@ export default function ConfirmOrderPage() {
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
+  const onboardOtpInputRef = useRef<HTMLInputElement>(null);
 
   // Clean up RecaptchaVerifier on unmount
   useEffect(() => {
@@ -95,10 +96,16 @@ export default function ConfirmOrderPage() {
       }
     };
     window.addEventListener("keydown", handleKeyDown);
-    setTimeout(() => onboardPhoneInputRef.current?.focus(), 50);
+    setTimeout(() => {
+      if (onboardingStep === "details") {
+        onboardPhoneInputRef.current?.focus();
+      } else {
+        onboardOtpInputRef.current?.focus();
+      }
+    }, 50);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showOnboarding]);
+  }, [showOnboarding, onboardingStep]);
 
   function isWithinOrderWindow(): boolean {
     const nowIST = new Date(
@@ -789,6 +796,7 @@ export default function ConfirmOrderPage() {
                   Enter the 6-digit OTP code sent to <strong>+91 {onboardPhone}</strong>.
                 </p>
                 <input
+                  ref={onboardOtpInputRef}
                   type="text"
                   value={onboardOtp}
                   onChange={(e) => setOnboardOtp(e.target.value)}

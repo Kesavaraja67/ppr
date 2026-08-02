@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     let body: { phone?: string; idToken?: string; name?: string };
     try {
       body = await req.json();
+      if (typeof body !== "object" || body === null) {
+        return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      }
     } catch {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }

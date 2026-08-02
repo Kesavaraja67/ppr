@@ -88,6 +88,7 @@ export default function MyOrdersPage() {
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <Link
           href="/"
+          aria-label="Back to catalog"
           style={{
             display: "flex",
             alignItems: "center",

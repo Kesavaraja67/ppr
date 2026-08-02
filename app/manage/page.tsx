@@ -83,8 +83,9 @@ export default function ManageLoginPage() {
               margin: "0 auto 16px",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="PPR Logo" style={{ height: "40px", width: "auto" }} />
+            <div style={{ width: "64px", height: "64px", borderRadius: "16px", overflow: "hidden", display: "inline-block" }}>
+              <img src="/logo.png?v=6" alt="PPR Logo" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </div>
           </div>
           <h1 style={{ fontSize: "1.2rem", fontWeight: 700 }}>Admin Access</h1>
           <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginTop: "4px" }}>

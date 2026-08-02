@@ -100,7 +100,7 @@ function LoginForm() {
       } else if (firebaseErr.code === "auth/invalid-phone-number") {
         setError("Invalid phone number. Please check and try again.");
       } else if (firebaseErr.code === "auth/billing-not-enabled") {
-        setError("Phone authentication requires billing to be enabled on this Firebase project. Please enable billing in the Firebase Console.");
+        setError("OTP service is temporarily unavailable. Please call the shop at 94437 21544.");
       } else {
         setError("Failed to send OTP. Please try again.");
       }
@@ -267,19 +267,32 @@ function LoginForm() {
             zIndex: 1,
           }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/logo.png"
-            alt="P.P.R. Fruits & Vegetables Logo"
+          <div
             style={{
-              height: "52px",
-              width: "auto",
-              objectFit: "contain",
-              display: "block",
+              width: "72px",
+              height: "72px",
+              borderRadius: "16px",
+              overflow: "hidden",
               flexShrink: 0,
-              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#ffffff",
+              boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
             }}
-          />
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png?v=6"
+              alt="P.P.R. Fruits & Vegetables Logo"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
           <p
             style={{
               color: "#fff",

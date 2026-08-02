@@ -60,6 +60,15 @@ Shop Contact: 94437 21544
 Thank you for shopping!`;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 // Builds narrow 80mm thermal receipt HTML (203 dpi, ~576px / 72mm width printable area)
 async function generatePDFData(order: Order, items: OrderItem[], shopName: string) {
   const priced = items.filter((i) => i.price_per_unit !== null);
@@ -68,10 +77,10 @@ async function generatePDFData(order: Order, items: OrderItem[], shopName: strin
       (i) =>
         `<tr>
           <td style="padding:4px 2px;vertical-align:top;border-bottom:1px dotted #ccc;">
-            <div style="font-weight:bold;">${i.name_en}</div>
-            ${i.name_ta ? `<div style="font-size:10px;color:#333;">${i.name_ta}</div>` : ''}
+            <div style="font-weight:bold;">${escapeHtml(i.name_en ?? "")}</div>
+            ${i.name_ta ? `<div style="font-size:10px;color:#333;">${escapeHtml(i.name_ta)}</div>` : ''}
           </td>
-          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">${Number(i.requested_qty)} ${i.unit}</td>
+          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">${Number(i.requested_qty)} ${escapeHtml(i.unit)}</td>
           <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">₹${Number(i.price_per_unit).toFixed(2)}</td>
           <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;font-weight:bold;">₹${Number(i.line_total).toFixed(2)}</td>
         </tr>`
@@ -86,7 +95,7 @@ async function generatePDFData(order: Order, items: OrderItem[], shopName: strin
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Receipt - ${order.id.slice(0, 8).toUpperCase()}</title>
+  <title>Receipt - ${escapeHtml(order.id.slice(0, 8).toUpperCase())}</title>
   <style>
     @page { size: 80mm auto; margin: 0; }
     body {
@@ -115,11 +124,11 @@ async function generatePDFData(order: Order, items: OrderItem[], shopName: strin
 </head>
 <body>
   <div class="header text-center">
-    <h1>${shopName}</h1>
+    <h1>${escapeHtml(shopName)}</h1>
     <p class="bold">FRESH FRUITS &amp; VEGETABLES</p>
-    <p>Delivery: ${order.delivery_date}</p>
-    <p>Order #${order.id.slice(0, 8).toUpperCase()}</p>
-    ${order.user_phone ? `<p>Customer: ${order.user_phone}</p>` : ''}
+    <p>Delivery: ${escapeHtml(order.delivery_date)}</p>
+    <p>Order #${escapeHtml(order.id.slice(0, 8).toUpperCase())}</p>
+    ${order.user_phone ? `<p>Customer: ${escapeHtml(order.user_phone)}</p>` : ''}
   </div>
 
   <table>

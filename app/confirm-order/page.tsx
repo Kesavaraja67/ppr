@@ -75,6 +75,30 @@ export default function ConfirmOrderPage() {
 
   const confirmationRef = useRef<ConfirmationResult | null>(null);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
+  const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up RecaptchaVerifier on unmount
+  useEffect(() => {
+    return () => {
+      recaptchaVerifierRef.current?.clear();
+      recaptchaVerifierRef.current = null;
+    };
+  }, []);
+
+  // Modal Escape key & focus handling
+  useEffect(() => {
+    if (!showOnboarding) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowOnboarding(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    setTimeout(() => onboardPhoneInputRef.current?.focus(), 50);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showOnboarding]);
 
   function isWithinOrderWindow(): boolean {
     const nowIST = new Date(
@@ -250,6 +274,7 @@ export default function ConfirmOrderPage() {
     if (!loggedIn) {
       if (!customerName.trim()) {
         setSubmitError("Please enter your name.");
+        return;
       }
       if (showNewAddress && !newAddressText.trim()) {
         setSubmitError("Please enter your address.");
@@ -297,13 +322,20 @@ export default function ConfirmOrderPage() {
         return;
       }
 
-      if (!recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current = new RecaptchaVerifier(
-          getFirebaseAuth(),
-          "onboard-recaptcha-container",
-          { size: "invisible" }
-        );
+      if (recaptchaVerifierRef.current) {
+        try {
+          recaptchaVerifierRef.current.clear();
+        } catch {}
+        recaptchaVerifierRef.current = null;
       }
+      const container = document.getElementById("onboard-recaptcha-container");
+      if (container) container.innerHTML = "";
+
+      recaptchaVerifierRef.current = new RecaptchaVerifier(
+        getFirebaseAuth(),
+        "onboard-recaptcha-container",
+        { size: "invisible" }
+      );
 
       const phoneNumber = `+91${cleaned}`;
       const confirmationResult = await signInWithPhoneNumber(
@@ -319,7 +351,7 @@ export default function ConfirmOrderPage() {
       const firebaseErr = err as { code?: string };
 
       if (firebaseErr.code === "auth/billing-not-enabled") {
-        setOtpError("Phone authentication requires billing to be enabled in Firebase Console (Blaze Plan).");
+        setOtpError("OTP service is temporarily unavailable. Please call the shop at 94437 21544.");
       } else {
         setOtpError("Failed to send OTP. Please check mobile number and try again.");
       }
@@ -368,7 +400,20 @@ export default function ConfirmOrderPage() {
       await executeOrderSubmission();
     } catch (err: unknown) {
       console.error("OTP verify error:", err);
-      setOtpError("Invalid verification code. Please check and try again.");
+      const firebaseErr = err as { code?: string };
+      if (
+        firebaseErr.code === "auth/network-request-failed" ||
+        (typeof navigator !== "undefined" && !navigator.onLine)
+      ) {
+        setOtpError("Network error. Please check your connection and try again.");
+      } else if (
+        firebaseErr.code === "auth/invalid-verification-code" ||
+        firebaseErr.code === "auth/code-expired"
+      ) {
+        setOtpError("Invalid or expired verification code. Please check and try again.");
+      } else {
+        setOtpError("Verification failed. Please try again.");
+      }
     } finally {
       setOtpLoading(false);
     }
@@ -645,6 +690,9 @@ export default function ConfirmOrderPage() {
       {/* 2-Step Onboarding Modal for First-Time / Logged-Out Users */}
       {showOnboarding && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="onboarding-modal-title"
           style={{
             position: "fixed",
             inset: 0,
@@ -669,10 +717,10 @@ export default function ConfirmOrderPage() {
             }}
           >
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--font)" }}>
+              <h3 id="onboarding-modal-title" style={{ fontSize: "1.1rem", fontWeight: 700, fontFamily: "var(--font)" }}>
                 {onboardingStep === "details" ? "Step 1: Mobile Verification" : "Step 2: Enter OTP Code"}
               </h3>
-              <button onClick={() => setShowOnboarding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}>
+              <button onClick={() => setShowOnboarding(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }} aria-label="Close modal">
                 <CloseIcon />
               </button>
             </div>
@@ -697,9 +745,10 @@ export default function ConfirmOrderPage() {
                       +91
                     </span>
                     <input
+                      ref={onboardPhoneInputRef}
                       type="tel"
                       value={onboardPhone}
-                      onChange={(e) => setOnboardPhone(e.target.value)}
+                      onChange={(e) => setOnboardPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                       placeholder="98765 43210"
                       maxLength={10}
                       style={{

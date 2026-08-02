@@ -3,7 +3,7 @@ import { getAdminAuth } from "@/lib/firebase-admin";
 import { normalizeIndianMobile } from "@/lib/otp";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
-import { eq } from "drizzle-orm";
+
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
 
 const SESSION_DURATION_DAYS = 75;
@@ -34,9 +34,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return NextResponse.json({ error: "Invalid name format" }, { status: 400 });
+    }
+    const submittedName = body.name?.trim() || undefined;
+    if (submittedName && submittedName.length > 100) {
+      return NextResponse.json(
+        { error: "Name cannot exceed 100 characters" },
+        { status: 400 }
+      );
+    }
+
     const phone = body.phone?.trim() ?? "";
     const idToken = body.idToken?.trim() ?? "";
-    const submittedName = body.name?.trim();
 
     const cleaned = normalizeIndianMobile(phone);
 
@@ -86,33 +96,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 4. Upsert user (save name and phone_number together) ──────────────────
+    // ── 4. Upsert user (single query) ────────────────────────────────────────
     const [upsertedUser] = await db
       .insert(users)
       .values({
         phone_number: expectedPhone,
         name: submittedName || null,
       })
-      .onConflictDoNothing({ target: users.phone_number })
+      .onConflictDoUpdate({
+        target: users.phone_number,
+        set: submittedName ? { name: submittedName } : { phone_number: expectedPhone },
+      })
       .returning({ id: users.id });
 
-    let userId = upsertedUser?.id;
-    if (!userId) {
-      const [existing] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.phone_number, expectedPhone))
-        .limit(1);
-      userId = existing?.id;
-
-      // Update name on existing user if provided
-      if (userId && submittedName) {
-        await db
-          .update(users)
-          .set({ name: submittedName })
-          .where(eq(users.id, userId));
-      }
-    }
+    const userId = upsertedUser?.id;
 
     if (!userId) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });

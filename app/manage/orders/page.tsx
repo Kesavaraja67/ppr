@@ -26,8 +26,8 @@ interface Order {
   user_phone: string | null;
   user_name: string | null;
   address_text: string | null;
-  lat: string | null;
-  long: string | null;
+  lat: number | null;
+  long: number | null;
   items: OrderItem[];
 }
 

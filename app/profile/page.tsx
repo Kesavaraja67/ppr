@@ -330,9 +330,11 @@ export default function ProfilePage() {
             <p style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--text-primary)" }}>
               {profile?.phone_number ?? "Not verified"}
             </p>
-            <span style={{ fontSize: "0.72rem", background: "#F3F4F6", color: "#6B7280", padding: "3px 10px", borderRadius: "9999px", fontWeight: 600 }}>
-              Verified
-            </span>
+            {profile?.phone_number && (
+              <span style={{ fontSize: "0.72rem", background: "#E6F4EE", color: "#1A6B47", padding: "3px 10px", borderRadius: "9999px", fontWeight: 600 }}>
+                Verified
+              </span>
+            )}
           </div>
         </div>
       </div>

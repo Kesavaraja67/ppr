@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderList } from "./OrderListProvider";
 
@@ -341,7 +341,7 @@ function OrderListIcon({ count }: { count: number }) {
 }
 
 // ── Product Card ──────────────────────────────────────────────────────────────
-function ProductCard({ veg, shopOpen = true }: { veg: Vegetable; shopOpen?: boolean }) {
+function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
   const { setQty, getQty } = useOrderList();
   const qty = getQty(veg.id);
   const color = CARD_COLORS[hashIndex(veg.id)];
@@ -556,19 +556,55 @@ function isWithinOrderWindow(): boolean {
   return h >= 8 && h < 20;
 }
 
+const emptySubscribe = () => () => {};
+
+function useIsStandalone(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => {
+      if (typeof window === "undefined") return false;
+      return (
+        window.matchMedia("(display-mode: standalone)").matches ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (navigator as any).standalone === true
+      );
+    },
+    () => false
+  );
+}
+
+function useDeviceType(): "desktop" | "android" | "ios" | "other" {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => {
+      if (typeof window === "undefined") return "other";
+      const ua = navigator.userAgent.toLowerCase();
+      const isIos =
+        /iphone|ipad|ipod/.test(ua) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const isAndroid = /android/.test(ua);
+      const isMobile = isIos || isAndroid || /mobile/.test(ua);
+      if (isIos) return "ios";
+      if (isAndroid) return "android";
+      if (!isMobile) return "desktop";
+      return "other";
+    },
+    () => "other"
+  );
+}
+
 // ── Main Catalog ──────────────────────────────────────────────────────────────
 export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
   const { totalCount } = useOrderList();
 
   type Category = "all" | "vegetable" | "fruit";
-  type DeviceType = "desktop" | "android" | "ios" | "other";
+
 
   const [category, setCategory] = useState<Category>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  // Start with SSR-safe defaults; real values set in useEffect after hydration
-  const [deviceType, setDeviceType] = useState<DeviceType>("other");
-  const [isStandalone, setIsStandalone] = useState(false);
+  const deviceType = useDeviceType();
+  const isStandalone = useIsStandalone();
   const [showIosModal, setShowIosModal] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<Event | null>(null);
   const [canInstall, setCanInstall] = useState(false);
@@ -595,22 +631,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     return () => clearInterval(id);
   }, []);
 
-  // Detect device type + standalone AFTER hydration (avoids SSR/client mismatch)
-  useEffect(() => {
-    const standalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (navigator as any).standalone === true;
-    setIsStandalone(standalone);
 
-    const ua = navigator.userAgent.toLowerCase();
-    const isIos = /iphone|ipad|ipod/.test(ua);
-    const isAndroid = /android/.test(ua);
-    const isMobile = isIos || isAndroid || /mobile/.test(ua);
-    if (isIos) setDeviceType("ios");
-    else if (isAndroid) setDeviceType("android");
-    else if (!isMobile) setDeviceType("desktop");
-  }, []);
 
   // PWA install listener (runs only when not standalone)
   useEffect(() => {
@@ -685,7 +706,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            maxHeight: isScrolled ? "0px" : "60px",
+            maxHeight: isScrolled ? "0px" : "68px",
             opacity: isScrolled ? 0 : 1,
             marginBottom: isScrolled ? "0px" : "14px",
             overflow: "hidden",
@@ -697,18 +718,32 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             aria-label="Staff login"
             style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none", color: "inherit" }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img 
-              src="/logo.png" 
-              alt="P.P.R. Fruits & Vegetables Logo" 
-              style={{ 
-                height: "48px", 
-                width: "auto", 
-                objectFit: "contain",
+            <div
+              style={{
+                width: "56px",
+                height: "56px",
+                borderRadius: "14px",
+                overflow: "hidden",
                 flexShrink: 0,
-                display: "block",
-              }} 
-            />
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                background: "#ffffff",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+              }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src="/logo.png?v=6" 
+                alt="P.P.R. Fruits & Vegetables Logo" 
+                style={{ 
+                  width: "100%", 
+                  height: "100%", 
+                  objectFit: "cover",
+                  display: "block",
+                }} 
+              />
+            </div>
             <div>
               <p
                 style={{
@@ -1005,7 +1040,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             </p>
           </div>
         ) : (
-          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} />)
+          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} shopOpen={shopOpen} />)
         )}
       </main>
 
@@ -1121,7 +1156,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                       color: "var(--text-muted)",
                     }}
                   >
-                    3km radius delivery area
+                    {config?.delivery_radius_km ?? 3}km radius delivery area
                   </p>
                 </div>
               </div>
@@ -1136,10 +1171,10 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                 }}
               >
                 <p style={{ fontWeight: 700, fontSize: "0.82rem", color: "var(--text-primary)", fontFamily: "var(--font)", lineHeight: 1.35 }}>
-                  We deliver within 3km. For larger orders or delivery outside this range, please call us directly.
+                  We deliver within {config?.delivery_radius_km ?? 3}km. For larger orders or delivery outside this range, please call us directly.
                 </p>
                 <p style={{ fontSize: "0.76rem", color: "var(--text-muted)", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-                  நாங்கள் 3 கிமீ சுற்றளவிற்குள் மட்டுமே டெலிவரி செய்கிறோம். பெரிய ஆர்டர்கள் அல்லது இதற்கு அப்பால் டெலிவரி தேவைப்பட்டால், நேரடியாக எங்களை அழைக்கவும்.
+                  நாங்கள் {config?.delivery_radius_km ?? 3} கிமீ சுற்றளவிற்குள் மட்டுமே டெலிவரி செய்கிறோம். பெரிய ஆர்டர்கள் அல்லது இதற்கு அப்பால் டெலிவரி தேவைப்பட்டால், நேரடியாக எங்களை அழைக்கவும்.
                 </p>
                 <a
                   href={`tel:${config?.phone_number || "9443721544"}`}

@@ -23,11 +23,26 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  // Type guards: ensure provided fields are strings
+  if (
+    (body.name !== undefined && typeof body.name !== "string") ||
+    (body.address_id !== undefined && typeof body.address_id !== "string") ||
+    (body.full_address !== undefined && typeof body.full_address !== "string")
+  ) {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
   // 1. Update name if provided
   if (body.name !== undefined) {
     const trimmedName = body.name.trim();
     if (!trimmedName) {
       return NextResponse.json({ error: "Name cannot be empty" }, { status: 400 });
+    }
+    if (trimmedName.length > 100) {
+      return NextResponse.json(
+        { error: "Name cannot exceed 100 characters" },
+        { status: 400 }
+      );
     }
     await db
       .update(users)
@@ -55,7 +70,7 @@ export async function PATCH(req: NextRequest) {
     await db
       .update(addresses)
       .set({ full_address: trimmedAddr })
-      .where(eq(addresses.id, body.address_id));
+      .where(and(eq(addresses.id, body.address_id), eq(addresses.user_id, session.userId)));
   }
 
   return NextResponse.json({ success: true });

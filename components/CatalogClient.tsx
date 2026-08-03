@@ -421,6 +421,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
             style={{
               objectFit: "contain",
               maxHeight: "110px",
+              maxWidth: "100%",
               height: "auto",
               width: "auto",
               position: "relative",

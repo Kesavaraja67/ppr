@@ -109,7 +109,54 @@ async function main() {
     }
     console.log(`✅ ${starterVegs.length} starter vegetables seeded`);
   } else {
-    console.log("ℹ️  Vegetables already exist — skipped");
+    console.log("ℹ️  Vegetables already exist — running idempotent name and metadata backfill");
+    
+    const renames = [
+      { oldName: "Tomato", newName: "Country Tomato", name_ta: "நாட்டு தக்காளி", image_url: "/curated/country_tomato.jpg" },
+      { oldName: "Onion", newName: "Big Onion", name_ta: "பெரிய வெங்காயம்", image_url: "/curated/big_onion.jpg" },
+      { oldName: "Cucumber", newName: "Country Cucumber", name_ta: "நாட்டு வெள்ளரிக்காய்", image_url: "/curated/country_cucumber.jpg" },
+    ];
+
+    for (const item of renames) {
+      const [existingTarget] = await db
+        .select()
+        .from(schema.vegetables)
+        .where(eq(schema.vegetables.name_en, item.newName))
+        .limit(1);
+
+      const [existingOld] = await db
+        .select()
+        .from(schema.vegetables)
+        .where(eq(schema.vegetables.name_en, item.oldName))
+        .limit(1);
+
+      if (existingOld) {
+        if (existingTarget) {
+          await db
+            .update(schema.vegetables)
+            .set({ image_url: item.image_url, is_curated_image: true })
+            .where(eq(schema.vegetables.id, existingTarget.id));
+          await db
+            .delete(schema.vegetables)
+            .where(eq(schema.vegetables.id, existingOld.id));
+        } else {
+          await db
+            .update(schema.vegetables)
+            .set({
+              name_en: item.newName,
+              name_ta: item.name_ta,
+              image_url: item.image_url,
+              is_curated_image: true,
+            })
+            .where(eq(schema.vegetables.id, existingOld.id));
+        }
+      } else if (existingTarget) {
+        await db
+          .update(schema.vegetables)
+          .set({ image_url: item.image_url, is_curated_image: true })
+          .where(eq(schema.vegetables.id, existingTarget.id));
+      }
+    }
   }
 
   console.log("✅ Seeding complete");

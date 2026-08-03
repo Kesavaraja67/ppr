@@ -149,7 +149,7 @@ function BillPDFDocument({ shopName, order, items }: BillPDFProps) {
         {/* Header */}
         <View style={styles.headerContainer}>
           <Text style={styles.shopTitle}>{shopName}</Text>
-          <Text style={styles.shopSubtitle}>FRESH FRUITS & VEGETABLES</Text>
+          <Text style={styles.shopSubtitle}>FRESH FRUITS &amp; VEGETABLES</Text>
           <Text style={styles.metaText}>Delivery Date: {order.delivery_date}</Text>
           <Text style={styles.metaText}>Order #: {shortOrderId}</Text>
           {order.customer_name ? (
@@ -259,18 +259,14 @@ export async function GET(
     const [config] = await db.select().from(shop_config).limit(1);
     const shopName = config?.shop_name ?? "P.P.R. Fruits and Vegetables";
 
-    const pdfDocument = React.createElement(BillPDFDocument, {
-      shopName,
-      order,
-      items,
-    });
-
-    const pdfBuffer = await renderToBuffer(pdfDocument);
+    const pdfBuffer = await renderToBuffer(
+      <BillPDFDocument shopName={shopName} order={order} items={items} />
+    );
 
     const isDownload = req.nextUrl.searchParams.get("download") === "true";
     const filename = `P.P.R.-Bill-${order.delivery_date}.pdf`;
 
-    return new NextResponse(pdfBuffer, {
+    return new NextResponse(new Uint8Array(pdfBuffer), {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",

@@ -1,6 +1,6 @@
 # Produce Product Photography Prompts & Image Guide
 
-This document lists the **72 produce items** added to the PPR Fruits & Vegetables catalog along with the exact studio food photography prompt for each item.
+This document lists the **73 produce items** added to the PPR Fruits & Vegetables catalog along with the exact studio food photography prompt for each item.
 
 ---
 
@@ -89,8 +89,8 @@ This document lists the **72 produce items** added to the PPR Fruits & Vegetable
 
 ### 13. Hyacinth Beans
 - **Tamil**: கொடியவரை
-- **Filename**: `public/curated/hyacinth_beans.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/hyacinth_beans.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green hyacinth beans kodi avarai, isolated on clean white background, food photography`
 
 ### 14. Country Cucumber
@@ -197,122 +197,122 @@ This document lists the **72 produce items** added to the PPR Fruits & Vegetable
 
 ### 31. Seppankizhangu
 - **Tamil**: சேப்பங்கலங்கு
-- **Filename**: `public/curated/seppankizhangu.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/seppankizhangu.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh colocasia taro root seppankizhangu, isolated on white background, food photography`
 
 ### 32. Elephant Foot Yam
 - **Tamil**: கருணக்கிழங்கு
-- **Filename**: `public/curated/elephant_foot_yam.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/elephant_foot_yam.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh elephant foot yam senai kizhangu tuber, isolated on white background, food photography`
 
 ### 33. Chinese Potato
 - **Tamil**: குறுக்கக்கிழங்கு
-- **Filename**: `public/curated/chinese_potato.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/chinese_potato.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh small Chinese potatoes koorka tubers, isolated on white background, food photography`
 
 ### 34. Coconut
 - **Tamil**: தேங்காய்
-- **Filename**: `public/curated/coconut.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/coconut.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh whole husked brown coconut, isolated on white background, food photography`
 
 ### 35. Turnip
 - **Tamil**: டர்னிப்
-- **Filename**: `public/curated/turnip.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/turnip.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh purple and white turnip root, isolated on white background, food photography`
 
 ### 36. Drumstick
 - **Tamil**: முருங்கைக்காய்
-- **Filename**: `public/curated/drumstick.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/drumstick.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green moringa drumsticks, isolated on clean white background, food photography`
 
 ### 37. Sena Kizhangu
 - **Tamil**: சானக்கிழங்கு
-- **Filename**: `public/curated/sena_kizhangu.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/sena_kizhangu.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh Indian sena kizhangu yam tuber, isolated on white background, food photography`
 
 ### 38. Kaavathu Kizhangu
 - **Tamil**: காவத்துக்கிழங்கு
-- **Filename**: `public/curated/kaavathu_kizhangu.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/kaavathu_kizhangu.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh Indian kaavathu kizhangu tubers, isolated on white background, food photography`
 
 ### 39. Madavaattu Kizhangu
 - **Tamil**: மடவாட்டுக்கிழங்கு
-- **Filename**: `public/curated/madavaattu_kizhangu.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/madavaattu_kizhangu.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh Indian madavaattu kizhangu root tuber, isolated on white background, food photography`
 
 ### 40. Garlic
 - **Tamil**: பூண்டு
-- **Filename**: `public/curated/garlic.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/garlic.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh white garlic bulbs, isolated on clean white background, food photography`
 
 ### 41. Country Garlic
 - **Tamil**: நாட்டு பூண்டு
-- **Filename**: `public/curated/country_garlic.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/country_garlic.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh Indian country garlic bulbs, isolated on white background, food photography`
 
 ### 42. Big Onion
 - **Tamil**: பெரிய வெங்காயம்
-- **Filename**: `public/curated/big_onion.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/big_onion.png`
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh red big onion, isolated on clean white background, food photography`
 
 ### 43. Small Onion
 - **Tamil**: சின்ன வெங்காயம்
-- **Filename**: `public/curated/small_onion.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/small_onion.png`
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh Indian small shallot onions chinnavengayam, isolated on white background, food photography`
 
 ### 44. Country Tomato
 - **Tamil**: நாட்டு தக்காளி
 - **Filename**: `public/curated/country_tomato.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh Indian country tomato nattu thakkali, isolated on white background, food photography`
 
 ### 45. Hybrid Tomato
 - **Tamil**: ஹைபிரிட் தக்காளி
-- **Filename**: `public/curated/hybrid_tomato.jpg`
-- **Status**: ⏳ Pending Generation
+- **Filename**: `public/curated/hybrid_tomato.png`
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh red hybrid tomatoes, isolated on clean white background, food photography`
 
 ### 46. Ooty Potato
 - **Tamil**: ஊட்டி உருளைக்கிழங்கு
 - **Filename**: `public/curated/ooty_potato.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh brown Ooty potatoes, isolated on white background, food photography`
 
 ### 47. Maize
 - **Tamil**: சோளம்
 - **Filename**: `public/curated/maize.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh yellow maize corn cob, isolated on white background, food photography`
 
 ### 48. Sweet Corn
 - **Tamil**: ஸ்வீட் கார்ன்
 - **Filename**: `public/curated/sweet_corn.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh yellow sweet corn cob, isolated on white background, food photography`
 
 ### 49. Groundnut
-- **Tamil**: வேரிக்காய்
+- **Tamil**: வேர்க்கடலை
 - **Filename**: `public/curated/groundnut.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh raw groundnut peanuts in shell, isolated on white background, food photography`
 
 ### 50. Mushroom
 - **Tamil**: காளான்
 - **Filename**: `public/curated/mushroom.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh white button mushrooms in a neat pile, isolated on clean white background, food photography`
 
 ---
@@ -378,6 +378,12 @@ This document lists the **72 produce items** added to the PPR Fruits & Vegetable
 - **Filename**: `public/curated/plums.jpg`
 - **Status**: ⏳ Pending Generation
 - **Prompt**: `Studio product photo of fresh ripe dark red plums, isolated on white background, food photography`
+
+### 61. Pear
+- **Tamil**: பேரிக்காய்
+- **Filename**: `public/curated/pear.jpg`
+- **Status**: ⏳ Pending Generation
+- **Prompt**: `Studio product photo of fresh green and yellow pear fruit, isolated on clean white background, food photography`
 
 ### 61. Red Dragon Fruit
 - **Tamil**: ரெட் டிராகன் ஃப்ரூட்

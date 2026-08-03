@@ -13,6 +13,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 import { drizzle } from "drizzle-orm/postgres-js";
+import { eq } from "drizzle-orm";
 import postgres from "postgres";
 import * as schema from "./schema";
 
@@ -27,7 +28,8 @@ interface VegRow {
   name_ta: string;
   unit: string;
   category: "vegetable" | "fruit";
-  // image_url is null for all — admin uploads via panel
+  image_url?: string;
+  is_curated_image?: boolean;
 }
 
 // ─── Full Tamil Nadu market produce list ──────────────────────────────────────
@@ -52,7 +54,7 @@ const PRODUCE: VegRow[] = [
   { name_en: "Broad Beans",          name_ta: "அவரைக்கா",                    unit: "kg",     category: "vegetable" },
   { name_en: "Cluster Beans",        name_ta: "கொத்தவரைக்கா",               unit: "kg",     category: "vegetable" },
   { name_en: "Hyacinth Beans",       name_ta: "கொடியவரை",                    unit: "kg",     category: "vegetable" },
-  { name_en: "Country Cucumber",     name_ta: "நாட்டு வெல்லரிக்காய்",       unit: "kg",     category: "vegetable" },
+  { name_en: "Country Cucumber",     name_ta: "நாட்டு வெல்லரிக்காய்",       unit: "kg",     category: "vegetable", image_url: "/curated/country_cucumber.jpg", is_curated_image: true },
   { name_en: "Field Beans",          name_ta: "மொச்சை",                      unit: "kg",     category: "vegetable" },
   { name_en: "Flat Beans",           name_ta: "தட்டைப்பயிர்",                unit: "kg",     category: "vegetable" },
   { name_en: "Snake Gourd",          name_ta: "பொடலங்காய்",                  unit: "kg",     category: "vegetable" },
@@ -80,15 +82,15 @@ const PRODUCE: VegRow[] = [
   { name_en: "Madavaattu Kizhangu",  name_ta: "மடவாட்டுக்கிழங்கு",         unit: "kg",     category: "vegetable" },
   { name_en: "Garlic",               name_ta: "பூண்டு",                      unit: "kg",     category: "vegetable" },
   { name_en: "Country Garlic",       name_ta: "நாட்டு பூண்டு",              unit: "kg",     category: "vegetable" },
-  { name_en: "Big Onion",            name_ta: "பெரிய வெங்காயம்",            unit: "kg",     category: "vegetable" },
-  { name_en: "Small Onion",          name_ta: "சின்ன வெங்காயம்",             unit: "kg",     category: "vegetable" },
-  { name_en: "Country Tomato",       name_ta: "நாட்டு தக்காளி",              unit: "kg",     category: "vegetable" },
-  { name_en: "Hybrid Tomato",        name_ta: "ஹைபிரிட் தக்காளி",           unit: "kg",     category: "vegetable" },
-  { name_en: "Ooty Potato",          name_ta: "ஊட்டி உருளைக்கிழங்கு",      unit: "kg",     category: "vegetable" },
-  { name_en: "Maize",                name_ta: "சோளம்",                       unit: "piece",  category: "vegetable" },
-  { name_en: "Sweet Corn",           name_ta: "ஸ்வீட் கார்ன்",              unit: "piece",  category: "vegetable" },
-  { name_en: "Groundnut",            name_ta: "வேரிக்காய்",                  unit: "kg",     category: "vegetable" },
-  { name_en: "Mushroom",             name_ta: "காளான்",                      unit: "packet", category: "vegetable" },
+  { name_en: "Big Onion",            name_ta: "பெரிய வெங்காயம்",            unit: "kg",     category: "vegetable", image_url: "/curated/big_onion.jpg", is_curated_image: true },
+  { name_en: "Small Onion",          name_ta: "சின்ன வெங்காயம்",             unit: "kg",     category: "vegetable", image_url: "/curated/small_onion.jpg", is_curated_image: true },
+  { name_en: "Country Tomato",       name_ta: "நாட்டு தக்காளி",              unit: "kg",     category: "vegetable", image_url: "/curated/country_tomato.jpg", is_curated_image: true },
+  { name_en: "Hybrid Tomato",        name_ta: "ஹைபிரிட் தக்காளி",           unit: "kg",     category: "vegetable", image_url: "/curated/hybrid_tomato.jpg", is_curated_image: true },
+  { name_en: "Ooty Potato",          name_ta: "ஊட்டி உருளைக்கிழங்கு",      unit: "kg",     category: "vegetable", image_url: "/curated/ooty_potato.jpg", is_curated_image: true },
+  { name_en: "Maize",                name_ta: "சோளம்",                       unit: "piece",  category: "vegetable", image_url: "/curated/maize.jpg", is_curated_image: true },
+  { name_en: "Sweet Corn",           name_ta: "ஸ்வீட் கார்ன்",              unit: "piece",  category: "vegetable", image_url: "/curated/sweet_corn.jpg", is_curated_image: true },
+  { name_en: "Groundnut",            name_ta: "வேர்க்கடலை",                  unit: "kg",     category: "vegetable", image_url: "/curated/groundnut.jpg", is_curated_image: true },
+  { name_en: "Mushroom",             name_ta: "காளான்",                      unit: "packet", category: "vegetable", image_url: "/curated/mushroom.jpg", is_curated_image: true },
 
   // ── Fruits ──────────────────────────────────────────────────────────────────
   { name_en: "Lemon",                name_ta: "லெமன்",                       unit: "kg",     category: "fruit" },
@@ -101,6 +103,7 @@ const PRODUCE: VegRow[] = [
   { name_en: "Guava",                name_ta: "கொய்யாப்பழம்",               unit: "kg",     category: "fruit" },
   { name_en: "Muskmelon",            name_ta: "முலாம்பழம்",                  unit: "kg",     category: "fruit" },
   { name_en: "Plums",                name_ta: "ப்ளம்ஸ்",                     unit: "kg",     category: "fruit" },
+  { name_en: "Pear",                 name_ta: "பேரிக்காய்",                  unit: "kg",     category: "fruit" },
   { name_en: "Red Dragon Fruit",     name_ta: "ரெட் டிராகன் ஃப்ரூட்",       unit: "kg",     category: "fruit" },
   { name_en: "Pomegranate",          name_ta: "மாதுளை பழம்",                unit: "kg",     category: "fruit" },
   { name_en: "Pineapple",            name_ta: "அண்ணாச்சி பழம்",             unit: "kg",     category: "fruit" },
@@ -140,18 +143,28 @@ async function main() {
         unit:             item.unit,
         category:         item.category,
         current_price:    "0",   // Admin sets price via stock management panel
-        image_url:        imageUrl,
-        is_curated_image: !!imageUrl,
+        image_url:        item.image_url ?? imageUrl,
+        is_curated_image: item.is_curated_image ?? !!imageUrl,
         in_stock:         true,
       })
       .onConflictDoNothing({ target: schema.vegetables.name_en })
       .returning({ id: schema.vegetables.id });
 
+    const finalImageUrl = item.image_url ?? imageUrl;
+
     if (inserted.length > 0) {
       console.log(`  ✅ Added "${item.name_en}" (${item.name_ta})`);
       added++;
     } else {
-      console.log(`  ⏭  Skipping "${item.name_en}" — already exists`);
+      if (finalImageUrl) {
+        await db
+          .update(schema.vegetables)
+          .set({ image_url: finalImageUrl, is_curated_image: true })
+          .where(eq(schema.vegetables.name_en, item.name_en));
+        console.log(`  🖼  Updated image for "${item.name_en}" → ${finalImageUrl}`);
+      } else {
+        console.log(`  ⏭  Skipping "${item.name_en}" — already exists`);
+      }
       skipped++;
     }
   }

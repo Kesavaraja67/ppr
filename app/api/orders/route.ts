@@ -14,6 +14,20 @@ function isWithinOrderWindow(): boolean {
   return h >= 8 && h < 20;
 }
 
+/** Helper to check if given lat/long coordinates are within shop delivery range */
+async function isAddressWithinDeliveryRange(
+  lat: number,
+  long: number,
+  fallbackWithinRange = false
+): Promise<{ withinRange: boolean; radiusKm: number }> {
+  const [shopConf] = await db.select().from(shop_config).limit(1);
+  const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
+  const withinRange = shopConf
+    ? haversineDistance(lat, long, Number(shopConf.lat), Number(shopConf.long)) <= radiusKm
+    : fallbackWithinRange;
+  return { withinRange, radiusKm };
+}
+
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getCustomerSession();
@@ -68,16 +82,11 @@ export async function POST(req: NextRequest) {
 
   if (body.new_address) {
     // Recompute delivery-zone check server-side — never trust the client value
-    const [shopConf] = await db.select().from(shop_config).limit(1);
-    const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
-    const withinRange = shopConf
-      ? haversineDistance(
-          body.new_address.lat,
-          body.new_address.long,
-          Number(shopConf.lat),
-          Number(shopConf.long)
-        ) <= radiusKm
-      : false;
+    const { withinRange } = await isAddressWithinDeliveryRange(
+      body.new_address.lat,
+      body.new_address.long,
+      false
+    );
 
     if (!withinRange) {
       return NextResponse.json(
@@ -116,18 +125,11 @@ export async function POST(req: NextRequest) {
     }
 
     // Re-verify delivery range server-side against current shop config.
-    // Never trust the stale is_within_range flag — the radius may have changed
-    // since the address was saved.
-    const [shopConfForAddr] = await db.select().from(shop_config).limit(1);
-    const radiusKmForAddr = shopConfForAddr ? Number(shopConfForAddr.delivery_radius_km) : 3;
-    const withinRangeNow = shopConfForAddr
-      ? haversineDistance(
-          Number(addr.lat),
-          Number(addr.long),
-          Number(shopConfForAddr.lat),
-          Number(shopConfForAddr.long)
-        ) <= radiusKmForAddr
-      : addr.is_within_range;
+    const { withinRange: withinRangeNow } = await isAddressWithinDeliveryRange(
+      Number(addr.lat),
+      Number(addr.long),
+      addr.is_within_range
+    );
 
     if (!withinRangeNow) {
       // Self-heal stale flag so the UI reflects reality on next fetch
@@ -201,12 +203,17 @@ export async function POST(req: NextRequest) {
       .where(eq(users.id, session.userId));
   }
 
-  // Idempotency check — return existing order if client_request_id was already used
+  // Idempotency check — return existing order if client_request_id was already used by this user
   if (body.client_request_id) {
     const [existingOrder] = await db
       .select({ id: orders.id })
       .from(orders)
-      .where(eq(orders.client_request_id, body.client_request_id))
+      .where(
+        and(
+          eq(orders.client_request_id, body.client_request_id),
+          eq(orders.user_id, session.userId)
+        )
+      )
       .limit(1);
     if (existingOrder) {
       // Return 200 (not 201) to signal idempotent replay — order already exists
@@ -249,14 +256,24 @@ export async function POST(req: NextRequest) {
       const [existingOrder] = await db
         .select({ id: orders.id })
         .from(orders)
-        .where(eq(orders.client_request_id, body.client_request_id))
+        .where(
+          and(
+            eq(orders.client_request_id, body.client_request_id),
+            eq(orders.user_id, session.userId)
+          )
+        )
         .limit(1);
       if (existingOrder) {
         return NextResponse.json({ orderId: existingOrder.id });
       }
     }
-    throw err;
+    console.error("Order creation transaction error:", err);
+    return NextResponse.json(
+      { error: "Failed to create order. Please try again." },
+      { status: 500 }
+    );
   }
+
 }
 
 

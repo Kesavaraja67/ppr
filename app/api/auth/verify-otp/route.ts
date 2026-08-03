@@ -3,9 +3,8 @@ import { verifyMsg91AccessToken } from "@/lib/msg91";
 import { checkIpRateLimit, checkPhoneRateLimit, normalizeIndianMobile } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
-import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
+import { createCustomerSession, CUSTOMER_SESSION_COOKIE, SESSION_DURATION_DAYS } from "@/lib/customer-auth";
 
-const SESSION_DURATION_DAYS = 75;
 
 /**
  * POST /api/auth/verify-otp

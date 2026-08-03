@@ -44,18 +44,39 @@ interface Stats {
   total_all_orders: number;
 }
 
+interface PaginationMeta {
+  total: number;
+  page: number;
+  limit: number;
+  has_more: boolean;
+}
+
 export default function AdminOrderHistoryPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdown[]>([]);
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [page, setPage] = useState<number>(1);
+  const [pagination, setPagination] = useState<PaginationMeta>({
+    total: 0,
+    page: 1,
+    limit: 20,
+    has_more: false,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = useCallback(() => {
-    setLoading(true);
+  const loadHistory = useCallback((status = filterStatus, pageNum = page, showSpinner = false) => {
+    if (showSpinner) setLoading(true);
     setError(null);
-    fetch("/api/admin/history")
+
+    const query = new URLSearchParams({
+      status: status,
+      page: String(pageNum),
+      limit: "20",
+    });
+
+    fetch(`/api/admin/history?${query.toString()}`)
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load order history");
         return r.json();
@@ -64,26 +85,30 @@ export default function AdminOrderHistoryPage() {
         setStats(d.stats ?? null);
         setDailyBreakdown(d.daily_breakdown ?? []);
         setOrders(d.orders ?? []);
+        if (d.pagination) {
+          setPagination(d.pagination);
+        }
       })
       .catch((err) => setError(err.message ?? "Failed to load order history"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [filterStatus, page]);
 
   useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
+    loadHistory(filterStatus, page, true);
+  }, [filterStatus, page]);
 
-  if (loading) {
+  const handleFilterChange = (newStatus: string) => {
+    setFilterStatus(newStatus);
+    setPage(1);
+  };
+
+  if (loading && orders.length === 0) {
     return (
       <div style={{ padding: "40px 24px", textAlign: "center", color: "#6b7280", fontFamily: "var(--font)" }}>
         Loading order history…
       </div>
     );
   }
-
-  const filteredOrders = filterStatus === "all"
-    ? orders
-    : orders.filter((o) => o.status === filterStatus);
 
   return (
     <div className="page-content" style={{ padding: "16px", maxWidth: "768px", margin: "0 auto", fontFamily: "var(--font)" }}>
@@ -121,7 +146,7 @@ export default function AdminOrderHistoryPage() {
         >
           <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{error}</p>
           <button
-            onClick={loadHistory}
+            onClick={() => loadHistory(filterStatus, page, true)}
             style={{
               padding: "6px 14px",
               background: "#dc2626",
@@ -261,7 +286,7 @@ export default function AdminOrderHistoryPage() {
         ].map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setFilterStatus(tab.key)}
+            onClick={() => handleFilterChange(tab.key)}
             style={{
               padding: "6px 14px",
               borderRadius: "9999px",
@@ -280,13 +305,13 @@ export default function AdminOrderHistoryPage() {
       </div>
 
       {/* Detailed Orders List */}
-      {filteredOrders.length === 0 ? (
+      {orders.length === 0 ? (
         <div style={{ background: "#fff", borderRadius: "16px", padding: "32px 16px", textAlign: "center", border: "1.5px solid #e5e7eb" }}>
           <p style={{ color: "#9ca3af", fontSize: "0.88rem" }}>No orders found for this status filter.</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {filteredOrders.map((order) => {
+          {orders.map((order) => {
             const dateStr = new Date(order.delivery_date).toLocaleDateString("en-IN", {
               weekday: "short",
               day: "numeric",
@@ -376,6 +401,47 @@ export default function AdminOrderHistoryPage() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {pagination.total > 0 && (
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", padding: "12px", background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              background: page <= 1 ? "#f3f4f6" : "#fff",
+              color: page <= 1 ? "#9ca3af" : "#374151",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              cursor: page <= 1 ? "not-allowed" : "pointer",
+            }}
+          >
+            ← Previous
+          </button>
+          <span style={{ fontSize: "0.82rem", color: "#6b7280" }}>
+            Page <strong>{page}</strong> of <strong>{Math.ceil(pagination.total / pagination.limit) || 1}</strong>
+          </span>
+          <button
+            disabled={!pagination.has_more}
+            onClick={() => setPage((p) => p + 1)}
+            style={{
+              padding: "6px 14px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              background: !pagination.has_more ? "#f3f4f6" : "#fff",
+              color: !pagination.has_more ? "#9ca3af" : "#374151",
+              fontSize: "0.8rem",
+              fontWeight: 600,
+              cursor: !pagination.has_more ? "not-allowed" : "pointer",
+            }}
+          >
+            Next →
+          </button>
         </div>
       )}
     </div>

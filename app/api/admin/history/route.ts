@@ -14,11 +14,11 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const statusFilter = searchParams.get("status");
 
-  // Validate limit/offset bounds for pagination
-  const rawLimit = parseInt(searchParams.get("limit") ?? "50", 10);
-  const rawOffset = parseInt(searchParams.get("offset") ?? "0", 10);
-  const limit = Math.min(Math.max(isNaN(rawLimit) ? 50 : rawLimit, 1), 100);
-  const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
+  const rawPage = parseInt(searchParams.get("page") ?? "1", 10);
+  const page = Math.max(isNaN(rawPage) ? 1 : rawPage, 1);
+  const rawLimit = parseInt(searchParams.get("limit") ?? "20", 10);
+  const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 100);
+  const offset = (page - 1) * limit;
 
   // 1. Stats query in SQL — total delivered count & revenue, plus total all orders count
   const [statsRes] = await db
@@ -53,6 +53,12 @@ export async function GET(req: NextRequest) {
     statusFilter && statusFilter !== "all"
       ? eq(orders.status, statusFilter)
       : undefined;
+
+  const [totalRes] = await db
+    .select({ count: count(orders.id) })
+    .from(orders)
+    .where(whereClause);
+  const total = Number(totalRes?.count) || 0;
 
   const paginatedOrders = await db
     .select({
@@ -120,5 +126,12 @@ export async function GET(req: NextRequest) {
     },
     daily_breakdown: dailyBreakdown,
     orders: ordersWithItems,
+    pagination: {
+      total,
+      page,
+      limit,
+      has_more: offset + paginatedOrders.length < total,
+    },
   });
 }
+

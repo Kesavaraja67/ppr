@@ -89,20 +89,25 @@ export async function proxy(request: NextRequest) {
 
     // Sliding-window renewal: if fewer than SESSION_RENEWAL_THRESHOLD_DAYS remain,
     // transparently mint a fresh 75-day token and set it on the response.
-    const nowSec = Math.floor(Date.now() / 1000);
-    const remainingDays = (session.exp - nowSec) / 86_400;
-    if (remainingDays < SESSION_RENEWAL_THRESHOLD_DAYS) {
-      const newToken = await renewCustomerSession(session.userId);
-      customerResponse.cookies.set(CUSTOMER_SESSION_COOKIE, newToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
-        path: "/",
-      });
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const remainingDays = (session.exp - nowSec) / 86_400;
+      if (remainingDays < SESSION_RENEWAL_THRESHOLD_DAYS) {
+        const newToken = await renewCustomerSession(session.userId);
+        customerResponse.cookies.set(CUSTOMER_SESSION_COOKIE, newToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
+          path: "/",
+        });
+      }
+    } catch (renewErr) {
+      console.error("Session renewal error in proxy middleware:", renewErr);
     }
 
     return customerResponse;
+
   }
 
   return NextResponse.next({ request: { headers: requestHeaders } });

@@ -26,12 +26,13 @@ export default function AdminPurchaseListPage() {
   const [totalOrders, setTotalOrders] = useState(0);
   const [deliveryDate, setDeliveryDate] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   const loadPurchaseList = useCallback(() => {
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     fetch("/api/admin/purchase-list")
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load purchase list");
@@ -42,7 +43,7 @@ export default function AdminPurchaseListPage() {
         setTotalOrders(d.total_orders ?? 0);
         setDeliveryDate(d.delivery_date ?? "");
       })
-      .catch((err) => setError(err.message ?? "Failed to load purchase list"))
+      .catch((err) => setLoadError(err.message ?? "Failed to load purchase list"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -52,6 +53,7 @@ export default function AdminPurchaseListPage() {
 
   const handleCopyWhatsApp = async () => {
     if (purchaseList.length === 0) return;
+    setCopyError(null);
 
     let text = `*PPR WHOLESALE PURCHASE LIST*\nDelivery Date: ${deliveryDate}\nTotal Orders: ${totalOrders}\n-----------------------------------\n\n`;
 
@@ -68,9 +70,10 @@ export default function AdminPurchaseListPage() {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      setCopyError(null);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      setError("Failed to copy to clipboard. Please copy manually.");
+      setCopyError("Failed to copy to clipboard. Please copy manually.");
     }
   };
 
@@ -210,7 +213,7 @@ export default function AdminPurchaseListPage() {
         </button>
       </div>
 
-      {error && (
+      {loadError && (
         <div
           style={{
             background: "#fef2f2",
@@ -223,7 +226,7 @@ export default function AdminPurchaseListPage() {
             justifyContent: "space-between",
           }}
         >
-          <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{error}</p>
+          <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{loadError}</p>
           <button
             onClick={loadPurchaseList}
             style={{
@@ -237,12 +240,44 @@ export default function AdminPurchaseListPage() {
               cursor: "pointer",
             }}
           >
-            Retry
+            Retry Fetch
           </button>
         </div>
       )}
 
-      {purchaseList.length === 0 ? (
+      {copyError && (
+        <div
+          style={{
+            background: "#fef2f2",
+            border: "1.5px solid #fecaca",
+            borderRadius: "12px",
+            padding: "14px 16px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{copyError}</p>
+          <button
+            onClick={handleCopyWhatsApp}
+            style={{
+              padding: "6px 14px",
+              background: "#dc2626",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Retry Copy
+          </button>
+        </div>
+      )}
+
+      {purchaseList.length === 0 && !loadError ? (
         <div
           style={{
             background: "#fff",
@@ -267,7 +302,7 @@ export default function AdminPurchaseListPage() {
             When customers place orders, the aggregated total quantities to purchase will automatically appear here.
           </p>
         </div>
-      ) : (
+      ) : purchaseList.length > 0 ? (
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
           {purchaseList.map((item) => (
             <div
@@ -349,7 +384,7 @@ export default function AdminPurchaseListPage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

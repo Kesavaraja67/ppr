@@ -66,10 +66,7 @@ export default function AdminOrderHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadHistory = useCallback((status = filterStatus, pageNum = page, showSpinner = false) => {
-    if (showSpinner) setLoading(true);
-    setError(null);
-
+  const loadHistory = useCallback((status: string, pageNum: number) => {
     const query = new URLSearchParams({
       status: status,
       page: String(pageNum),
@@ -82,6 +79,7 @@ export default function AdminOrderHistoryPage() {
         return r.json();
       })
       .then((d) => {
+        setError(null);
         setStats(d.stats ?? null);
         setDailyBreakdown(d.daily_breakdown ?? []);
         setOrders(d.orders ?? []);
@@ -91,15 +89,27 @@ export default function AdminOrderHistoryPage() {
       })
       .catch((err) => setError(err.message ?? "Failed to load order history"))
       .finally(() => setLoading(false));
-  }, [filterStatus, page]);
+  }, []);
+
 
   useEffect(() => {
-    loadHistory(filterStatus, page, true);
-  }, [filterStatus, page]);
+    loadHistory(filterStatus, page);
+  }, [filterStatus, page, loadHistory]);
 
   const handleFilterChange = (newStatus: string) => {
+    setLoading(true);
     setFilterStatus(newStatus);
     setPage(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setLoading(true);
+    setPage(newPage);
+  };
+
+  const handleRetry = () => {
+    setLoading(true);
+    loadHistory(filterStatus, page);
   };
 
   if (loading && orders.length === 0) {
@@ -146,7 +156,7 @@ export default function AdminOrderHistoryPage() {
         >
           <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{error}</p>
           <button
-            onClick={() => loadHistory(filterStatus, page, true)}
+            onClick={handleRetry}
             style={{
               padding: "6px 14px",
               background: "#dc2626",
@@ -409,7 +419,7 @@ export default function AdminOrderHistoryPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", padding: "12px", background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
           <button
             disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            onClick={() => handlePageChange(Math.max(page - 1, 1))}
             style={{
               padding: "6px 14px",
               borderRadius: "8px",
@@ -428,7 +438,7 @@ export default function AdminOrderHistoryPage() {
           </span>
           <button
             disabled={!pagination.has_more}
-            onClick={() => setPage((p) => p + 1)}
+            onClick={() => handlePageChange(page + 1)}
             style={{
               padding: "6px 14px",
               borderRadius: "8px",

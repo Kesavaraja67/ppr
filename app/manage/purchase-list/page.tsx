@@ -31,14 +31,13 @@ export default function AdminPurchaseListPage() {
   const [copied, setCopied] = useState(false);
 
   const loadPurchaseList = useCallback(() => {
-    setLoading(true);
-    setLoadError(null);
     fetch("/api/admin/purchase-list")
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load purchase list");
         return r.json();
       })
       .then((d) => {
+        setLoadError(null);
         setPurchaseList(d.purchase_list ?? []);
         setTotalOrders(d.total_orders ?? 0);
         setDeliveryDate(d.delivery_date ?? "");
@@ -47,9 +46,15 @@ export default function AdminPurchaseListPage() {
       .finally(() => setLoading(false));
   }, []);
 
+
   useEffect(() => {
     loadPurchaseList();
   }, [loadPurchaseList]);
+
+  const handleRetryFetch = () => {
+    setLoading(true);
+    loadPurchaseList();
+  };
 
   const handleCopyWhatsApp = async () => {
     if (purchaseList.length === 0) return;
@@ -228,7 +233,7 @@ export default function AdminPurchaseListPage() {
         >
           <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{loadError}</p>
           <button
-            onClick={loadPurchaseList}
+            onClick={handleRetryFetch}
             style={{
               padding: "6px 14px",
               background: "#dc2626",

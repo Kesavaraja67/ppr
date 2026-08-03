@@ -43,8 +43,10 @@ function LoginForm() {
     setError("");
     setLoading(true);
 
+    let timedOut = false;
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const timer = setTimeout(() => {
+      timedOut = true;
       setError("OTP request timed out. Please check your connection and try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -53,6 +55,7 @@ function LoginForm() {
     window.sendOtp(
       `91${cleaned}`,
       () => {
+        if (timedOut) return;
         clearTimeout(timer);
         if (!isResend) setStep("otp");
         setLoading(false);
@@ -60,6 +63,7 @@ function LoginForm() {
         setTimeout(() => otpInputRef.current?.focus(), 100);
       },
       (err: unknown) => {
+        if (timedOut) return;
         clearTimeout(timer);
         setError("Failed to send OTP. Please try again.");
         setLoading(false);
@@ -81,8 +85,10 @@ function LoginForm() {
     setError("");
     setLoading(true);
 
+    let timedOut = false;
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const verifyTimer = setTimeout(() => {
+      timedOut = true;
       setError("Verification timed out. Please try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -91,6 +97,7 @@ function LoginForm() {
     window.verifyOtp(
       code,
       async (data: { message: string }) => {
+        if (timedOut) return;
         clearTimeout(verifyTimer);
         try {
           const controller = new AbortController();
@@ -102,6 +109,7 @@ function LoginForm() {
             signal: controller.signal,
           });
           clearTimeout(fetchTimer);
+          if (timedOut) return;
           const json = await res.json();
           if (!res.ok) {
             setError(json.error ?? "Verification failed. Please check the OTP code.");
@@ -110,6 +118,7 @@ function LoginForm() {
           }
           router.replace(nextUrl);
         } catch (e) {
+          if (timedOut) return;
           const isAbort = e instanceof Error && e.name === "AbortError";
           setError(
             isAbort
@@ -120,6 +129,7 @@ function LoginForm() {
         }
       },
       (err: unknown) => {
+        if (timedOut) return;
         clearTimeout(verifyTimer);
         setError("Invalid or expired OTP code.");
         setLoading(false);
@@ -127,6 +137,7 @@ function LoginForm() {
       }
     );
   };
+
 
   // WebOTP API — Android Chrome auto-fill
   useEffect(() => {

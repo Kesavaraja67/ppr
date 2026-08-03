@@ -182,8 +182,9 @@ export default function ShopDetailsPage() {
             </li>
             <li style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ color: "#6b7280" }}>Delivery Time:</span>
-              <span style={{ fontWeight: 600 }}>Next morning to your doorstep(After 10 am)</span>
+              <span style={{ fontWeight: 600 }}>Next morning to your doorstep (after 10 AM)</span>
             </li>
+
           </ul>
         </div>
 

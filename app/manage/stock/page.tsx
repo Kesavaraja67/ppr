@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { orders, vegetables, supplier_requests } from "@/drizzle/schema";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, count } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -77,37 +77,41 @@ export default async function AdminDashboardPage() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
 
-  const pendingOrders = await db
-    .select({ id: orders.id })
-    .from(orders)
-    .where(and(eq(orders.delivery_date, tomorrowStr), eq(orders.status, "pending")));
-
-  const activeTomorrowOrders = await db
-    .select({ id: orders.id })
-    .from(orders)
-    .where(and(eq(orders.delivery_date, tomorrowStr), ne(orders.status, "cancelled")));
-
-  const vegCount = await db
-    .select({ id: vegetables.id })
-    .from(vegetables)
-    .where(eq(vegetables.in_stock, true));
-
-  const deliveredOrders = await db
-    .select({ id: orders.id })
-    .from(orders)
-    .where(eq(orders.status, "delivered"));
-
-  const unseenSuppliers = await db
-    .select({ id: supplier_requests.id })
-    .from(supplier_requests)
-    .where(eq(supplier_requests.seen, false));
+  const [
+    [{ count: pendingCount }],
+    [{ count: activeTomorrowCount }],
+    [{ count: vegCount }],
+    [{ count: deliveredCount }],
+    [{ count: unseenSupplierCount }],
+  ] = await Promise.all([
+    db
+      .select({ count: count() })
+      .from(orders)
+      .where(and(eq(orders.delivery_date, tomorrowStr), eq(orders.status, "pending"))),
+    db
+      .select({ count: count() })
+      .from(orders)
+      .where(and(eq(orders.delivery_date, tomorrowStr), ne(orders.status, "cancelled"))),
+    db
+      .select({ count: count() })
+      .from(vegetables)
+      .where(eq(vegetables.in_stock, true)),
+    db
+      .select({ count: count() })
+      .from(orders)
+      .where(eq(orders.status, "delivered")),
+    db
+      .select({ count: count() })
+      .from(supplier_requests)
+      .where(eq(supplier_requests.seen, false)),
+  ]);
 
   const tiles = [
     {
       href: "/manage/orders",
       icon: OrdersIcon,
       label: "Tomorrow's Orders",
-      sublabel: `${pendingOrders.length} pending order${pendingOrders.length !== 1 ? "s" : ""}`,
+      sublabel: `${pendingCount} pending order${pendingCount !== 1 ? "s" : ""}`,
       accent: true,
       badge: 0,
     },
@@ -115,7 +119,7 @@ export default async function AdminDashboardPage() {
       href: "/manage/purchase-list",
       icon: CartIcon,
       label: "Purchase List",
-      sublabel: `Total stock needed for ${activeTomorrowOrders.length} order${activeTomorrowOrders.length !== 1 ? "s" : ""}`,
+      sublabel: `Total stock needed for ${activeTomorrowCount} order${activeTomorrowCount !== 1 ? "s" : ""}`,
       accent: false,
       badge: 0,
     },
@@ -123,7 +127,7 @@ export default async function AdminDashboardPage() {
       href: "/manage/vegetables",
       icon: LeafIcon,
       label: "Manage Items",
-      sublabel: `${vegCount.length} active item${vegCount.length !== 1 ? "s" : ""}`,
+      sublabel: `${vegCount} active item${vegCount !== 1 ? "s" : ""}`,
       accent: false,
       badge: 0,
     },
@@ -131,7 +135,7 @@ export default async function AdminDashboardPage() {
       href: "/manage/history",
       icon: HistoryIcon,
       label: "Order History",
-      sublabel: `${deliveredOrders.length} delivered order${deliveredOrders.length !== 1 ? "s" : ""} • Daily logs`,
+      sublabel: `${deliveredCount} delivered order${deliveredCount !== 1 ? "s" : ""} • Daily logs`,
       accent: false,
       badge: 0,
     },
@@ -139,11 +143,11 @@ export default async function AdminDashboardPage() {
       href: "/manage/suppliers",
       icon: InboxIcon,
       label: "Supplier Inbox",
-      sublabel: unseenSuppliers.length > 0
-        ? `${unseenSuppliers.length} new enquir${unseenSuppliers.length !== 1 ? "ies" : "y"}`
+      sublabel: unseenSupplierCount > 0
+        ? `${unseenSupplierCount} new enquir${unseenSupplierCount !== 1 ? "ies" : "y"}`
         : "Supplier contact requests",
       accent: false,
-      badge: unseenSuppliers.length,
+      badge: unseenSupplierCount,
     },
     {
       href: "/manage/settings",

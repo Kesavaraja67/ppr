@@ -11,9 +11,9 @@ export default function ErrorPage({
   reset: () => void;
 }) {
   useEffect(() => {
-    // TODO(observability): forward error + digest to Sentry/logging service
     console.error("[ErrorBoundary]", error.message, error.digest);
   }, [error]);
+
 
   return (
     <div

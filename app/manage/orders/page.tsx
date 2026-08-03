@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import StatusBadge from "@/components/admin/StatusBadge";
 
 interface OrderItem {
   id: string;
@@ -30,22 +31,6 @@ interface Order {
   long: number | null;
   items: OrderItem[];
 }
-
-interface ShoppingListEntry {
-  name_en: string;
-  name_ta: string;
-  unit: string;
-  category: string;
-  total_qty: number;
-}
-
-const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
-  pending:          { label: "Pending",         bg: "#fef3c7", color: "#92400e" },
-  priced:           { label: "Priced",           bg: "#dbeafe", color: "#1e40af" },
-  out_for_delivery: { label: "Out for delivery", bg: "#fde68a", color: "#78350f" },
-  delivered:        { label: "Delivered",        bg: "#d1fae5", color: "#065f46" },
-  cancelled:        { label: "Cancelled",        bg: "#f3f4f6", color: "#6b7280" },
-};
 
 const STATUS_TRANSITIONS: Record<string, { next: string; label: string }[]> = {
   pending:          [
@@ -106,35 +91,14 @@ function MapPinIcon() {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? { label: status, bg: "#f3f4f6", color: "#6b7280" };
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        fontSize: "0.7rem",
-        fontWeight: 700,
-        padding: "3px 10px",
-        borderRadius: "9999px",
-        background: meta.bg,
-        color: meta.color,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.label}
-    </span>
-  );
-}
-
 const POLL_INTERVAL_MS = 35_000;
 
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [shoppingList, setShoppingList] = useState<ShoppingListEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<"orders" | "shopping">("orders");
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [newOrderIds, setNewOrderIds] = useState<Set<string>>(new Set());
+
 
   // Track IDs already seen so we can detect genuinely new arrivals on each poll
   const knownIdsRef = useRef<Set<string> | null>(null);
@@ -166,9 +130,9 @@ export default function AdminOrdersPage() {
         }
 
         setOrders(incoming);
-        setShoppingList(d.shopping_list ?? []);
       })
       .finally(() => setLoading(false));
+
   }, []);
 
   useEffect(() => {
@@ -296,21 +260,20 @@ export default function AdminOrdersPage() {
           marginBottom: "16px",
         }}
       >
-        <button
-          onClick={() => setView("orders")}
+        <span
           style={{
             flex: 1,
             padding: "10px",
-            border: "none",
-            background: view === "orders" ? "#166534" : "#fff",
-            color: view === "orders" ? "#fff" : "#6b7280",
+            textAlign: "center",
+            background: "#166534",
+            color: "#fff",
             fontWeight: 700,
             fontSize: "0.85rem",
-            cursor: "pointer",
           }}
         >
           Orders
-        </button>
+        </span>
+
         <Link
           href="/manage/purchase-list"
           style={{
@@ -335,8 +298,9 @@ export default function AdminOrdersPage() {
         <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>
           No orders for tomorrow yet.
         </div>
-      ) : view === "orders" ? (
+      ) : (
         <div className="admin-orders-grid">
+
           {orders.map((order) => {
             const transitions = STATUS_TRANSITIONS[order.status] ?? [];
             const isUpdating = updatingId === order.id;
@@ -506,41 +470,8 @@ export default function AdminOrdersPage() {
             );
           })}
         </div>
-      ) : (
-        <div>
-          <p style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "12px" }}>
-            Total quantities across all {pendingCount} pending order{pendingCount !== 1 ? "s" : ""}:
-          </p>
-          <div style={{ background: "#fff", borderRadius: "12px", border: "1px solid #e5e7eb", overflow: "hidden" }}>
-            {shoppingList.length === 0 ? (
-              <p style={{ padding: "20px 16px", color: "#9ca3af", textAlign: "center", fontSize: "0.85rem" }}>
-                No pending orders to aggregate.
-              </p>
-            ) : (
-              shoppingList.map((entry, i) => (
-                <div
-                  key={entry.name_en}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "12px 16px",
-                    borderBottom: i < shoppingList.length - 1 ? "1px solid #f3f4f6" : "none",
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>{entry.name_en}</span>
-                    <span style={{ color: "#9ca3af", fontSize: "0.8rem", marginLeft: "6px" }}>({entry.name_ta})</span>
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: "1rem", color: "#166534" }}>
-                    {entry.total_qty} {entry.unit}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
       )}
     </div>
   );
 }
+

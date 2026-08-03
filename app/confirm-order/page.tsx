@@ -557,8 +557,13 @@ export default function ConfirmOrderPage() {
                   />
                   <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
                     <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
-                    <span style={{ fontSize: "0.72rem", color: "#1A6B47", fontWeight: 600 }}>✓ Verified within 3km delivery zone</span>
+                    {addr.is_within_range && (
+                      <span style={{ fontSize: "0.72rem", color: "#1A6B47", fontWeight: 600 }}>
+                        ✓ Verified within {shopCoords?.radius ?? 3}km delivery zone
+                      </span>
+                    )}
                   </div>
+
                 </label>
               ))}
             </div>

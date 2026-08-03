@@ -2,7 +2,8 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
 export const CUSTOMER_SESSION_COOKIE = "ppr_customer_session";
-const SESSION_DURATION_DAYS = 75; // 60-90 day range per spec
+export const SESSION_DURATION_DAYS = 75; // 60-90 day range per spec
+
 
 function getJwtSecret(): Uint8Array {
   const secret = process.env.CUSTOMER_JWT_SECRET;

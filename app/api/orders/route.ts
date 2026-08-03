@@ -165,13 +165,14 @@ export async function POST(req: NextRequest) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const deliveryDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
 
-  // Cancellable until 10:00 PM today (IST) = 22:00 IST = 16:30 UTC
+  // Cancellable until 8:00 PM today (IST) = 20:00 IST
   const cancellableUntilIST = new Date(
-    `${nowIST.getFullYear()}-${String(nowIST.getMonth() + 1).padStart(2, "0")}-${String(nowIST.getDate()).padStart(2, "0")}T22:00:00+05:30`
+    `${nowIST.getFullYear()}-${String(nowIST.getMonth() + 1).padStart(2, "0")}-${String(nowIST.getDate()).padStart(2, "0")}T20:00:00+05:30`
   );
-  // If it's already past 10 PM, order can't be cancelled (cutoff passed immediately)
+  // If it's already past 8 PM, order can't be cancelled (cutoff passed immediately)
   // We still allow order creation, just with cancellable_until in the past
   const cancellableUntil = cancellableUntilIST;
+
 
   // Verify all vegetable IDs exist
   const vegIds = body.items.map((i) => i.veg_id);
@@ -214,32 +215,50 @@ export async function POST(req: NextRequest) {
   }
 
   // Create order + order_items in a single transaction
-  const result = await db.transaction(async (tx) => {
-    const [order] = await tx
-      .insert(orders)
-      .values({
-        user_id: session.userId,
-        address_id: addressId,
-        delivery_date: deliveryDate,
-        cancellable_until: cancellableUntil,
-        client_request_id: body.client_request_id || null,
-      })
-      .returning({ id: orders.id });
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [order] = await tx
+        .insert(orders)
+        .values({
+          user_id: session.userId,
+          address_id: addressId,
+          delivery_date: deliveryDate,
+          cancellable_until: cancellableUntil,
+          client_request_id: body.client_request_id || null,
+        })
+        .returning({ id: orders.id });
 
-    await tx.insert(order_items).values(
-      body.items.map((item) => ({
-        order_id: order.id,
-        veg_id: item.veg_id,
-        requested_qty: String(item.qty),
-        unit: item.unit || vegMap.get(item.veg_id) || "kg",
-      }))
-    );
+      await tx.insert(order_items).values(
+        body.items.map((item) => ({
+          order_id: order.id,
+          veg_id: item.veg_id,
+          requested_qty: String(item.qty),
+          unit: item.unit || vegMap.get(item.veg_id) || "kg",
+        }))
+      );
 
-    return order;
-  });
+      return order;
+    });
 
-  return NextResponse.json({ orderId: result.id }, { status: 201 });
+    return NextResponse.json({ orderId: result.id }, { status: 201 });
+  } catch (err: unknown) {
+    // Handle Postgres unique violation (code 23505) for concurrent duplicate submission
+    const isUniqueViolation =
+      typeof err === "object" && err !== null && "code" in err && err.code === "23505";
+    if (isUniqueViolation && body.client_request_id) {
+      const [existingOrder] = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.client_request_id, body.client_request_id))
+        .limit(1);
+      if (existingOrder) {
+        return NextResponse.json({ orderId: existingOrder.id });
+      }
+    }
+    throw err;
+  }
 }
+
 
 // ─── GET /api/orders — list user's orders ────────────────────────────────────
 export async function GET() {

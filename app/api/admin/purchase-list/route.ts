@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, order_items, users, vegetables } from "@/drizzle/schema";
-import { eq, inArray, ne } from "drizzle-orm";
+import { eq, and, inArray, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 
 export async function GET(req: NextRequest) {
@@ -14,8 +14,16 @@ export async function GET(req: NextRequest) {
   // Get requested date from query param, or default to tomorrow IST
   const dateParam = req.nextUrl.searchParams.get("date");
 
-  let targetDateStr = dateParam;
-  if (!targetDateStr) {
+  let targetDateStr: string;
+  if (dateParam) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      return NextResponse.json(
+        { error: "Invalid date format. Expected YYYY-MM-DD." },
+        { status: 400 }
+      );
+    }
+    targetDateStr = dateParam;
+  } else {
     const nowIST = new Date(
       new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
     );
@@ -24,7 +32,7 @@ export async function GET(req: NextRequest) {
     targetDateStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
   }
 
-  // Fetch all active orders for the date (excluding cancelled)
+  // Fetch all active orders for the date (excluding cancelled via SQL WHERE)
   const activeOrders = await db
     .select({
       id: orders.id,
@@ -34,10 +42,14 @@ export async function GET(req: NextRequest) {
     })
     .from(orders)
     .leftJoin(users, eq(orders.user_id, users.id))
-    .where(eq(orders.delivery_date, targetDateStr));
+    .where(
+      and(
+        eq(orders.delivery_date, targetDateStr),
+        ne(orders.status, "cancelled")
+      )
+    );
 
-  const filteredOrders = activeOrders.filter((o) => o.status !== "cancelled");
-  const orderIds = filteredOrders.map((o) => o.id);
+  const orderIds = activeOrders.map((o) => o.id);
 
   if (orderIds.length === 0) {
     return NextResponse.json({
@@ -64,7 +76,7 @@ export async function GET(req: NextRequest) {
 
   // Map order_id to customer details
   const orderCustomerMap = new Map(
-    filteredOrders.map((o) => [
+    activeOrders.map((o) => [
       o.id,
       {
         name: o.user_name ?? "Customer",
@@ -133,7 +145,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     delivery_date: targetDateStr,
-    total_orders: filteredOrders.length,
+    total_orders: activeOrders.length,
     purchase_list: purchaseList,
   });
 }

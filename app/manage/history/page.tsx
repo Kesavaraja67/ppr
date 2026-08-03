@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import StatusBadge from "@/components/admin/StatusBadge";
 
 interface OrderItem {
   id: string;
@@ -43,52 +44,34 @@ interface Stats {
   total_all_orders: number;
 }
 
-const STATUS_META: Record<string, { label: string; bg: string; color: string }> = {
-  pending:          { label: "Pending",          bg: "#fef3c7", color: "#92400e" },
-  priced:           { label: "Priced",            bg: "#dbeafe", color: "#1e40af" },
-  out_for_delivery: { label: "Out for delivery", bg: "#fde68a", color: "#78350f" },
-  delivered:        { label: "Delivered",        bg: "#d1fae5", color: "#065f46" },
-  cancelled:        { label: "Cancelled",        bg: "#f3f4f6", color: "#6b7280" },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const meta = STATUS_META[status] ?? { label: status, bg: "#f3f4f6", color: "#6b7280" };
-  return (
-    <span
-      style={{
-        display: "inline-block",
-        fontSize: "0.72rem",
-        fontWeight: 700,
-        padding: "3px 10px",
-        borderRadius: "9999px",
-        background: meta.bg,
-        color: meta.color,
-        whiteSpace: "nowrap",
-      }}
-    >
-      {meta.label}
-    </span>
-  );
-}
-
 export default function AdminOrderHistoryPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdown[]>([]);
   const [orders, setOrders] = useState<OrderHistoryItem[]>([]);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadHistory = useCallback(() => {
+    setLoading(true);
+    setError(null);
     fetch("/api/admin/history")
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load order history");
+        return r.json();
+      })
       .then((d) => {
         setStats(d.stats ?? null);
         setDailyBreakdown(d.daily_breakdown ?? []);
         setOrders(d.orders ?? []);
       })
-      .catch(() => {})
+      .catch((err) => setError(err.message ?? "Failed to load order history"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   if (loading) {
     return (
@@ -122,6 +105,38 @@ export default function AdminOrderHistoryPage() {
           </p>
         </div>
       </div>
+
+      {error && (
+        <div
+          style={{
+            background: "#fef2f2",
+            border: "1.5px solid #fecaca",
+            borderRadius: "12px",
+            padding: "14px 16px",
+            marginBottom: "20px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <p style={{ fontSize: "0.85rem", color: "#dc2626", fontWeight: 500 }}>{error}</p>
+          <button
+            onClick={loadHistory}
+            style={{
+              padding: "6px 14px",
+              background: "#dc2626",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              fontSize: "0.78rem",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Overview Stats Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "20px" }}>

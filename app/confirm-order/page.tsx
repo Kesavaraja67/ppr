@@ -58,7 +58,7 @@ export default function ConfirmOrderPage() {
   const [newAddressCoords, setNewAddressCoords] = useState<{ lat: number; long: number } | null>(null);
   const [locationError, setLocationError] = useState("");
   const [shopCoords, setShopCoords] = useState<{ lat: number; long: number; radius: number } | null>(null);
-  
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
@@ -73,6 +73,29 @@ export default function ConfirmOrderPage() {
 
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
+
+  // Load MSG91 OTP Widget with exposed methods for the onboarding modal
+  useEffect(() => {
+    const configuration = {
+      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+      tokenAuth: process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH,
+      exposeMethods: true,
+      captchaRenderId: "msg91-captcha-order",
+      success: () => {},
+      failure: (err: unknown) => console.error("MSG91 widget error:", err),
+    };
+    const script = document.createElement("script");
+    script.src = "https://verify.msg91.com/otp-provider.js";
+    script.async = true;
+    script.onload = () => {
+      // @ts-expect-error global exposed by the MSG91 otp-provider script
+      window.initSendOTP(configuration);
+    };
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   // Modal Escape key & focus handling
   useEffect(() => {
@@ -116,7 +139,7 @@ export default function ConfirmOrderPage() {
           });
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   // Auth check on mount
@@ -308,71 +331,67 @@ export default function ConfirmOrderPage() {
   };
 
   // OTP Handling inside onboarding
-  const handleSendOtp = async () => {
+  const handleSendOtp = () => {
     const cleaned = normalizeIndianMobile(onboardPhone);
     if (cleaned.length !== 10) {
       setOtpError("Enter a valid 10-digit mobile number");
       return;
     }
-
     setOtpError("");
     setOtpLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setOtpError(data.error ?? "Failed to send OTP. Please try again.");
-        return;
+    // @ts-expect-error exposed by the MSG91 widget script
+    window.sendOtp(
+      `91${cleaned}`,
+      () => {
+        setOnboardingStep("otp");
+        setOtpLoading(false);
+        setTimeout(() => onboardOtpInputRef.current?.focus(), 50);
+      },
+      (err: unknown) => {
+        setOtpError("Failed to send OTP. Please try again.");
+        setOtpLoading(false);
+        console.error(err);
       }
-
-      setOnboardingStep("otp");
-    } catch {
-      setOtpError("Failed to send OTP. Please check mobile number and try again.");
-    } finally {
-      setOtpLoading(false);
-    }
+    );
   };
 
-  const handleVerifyOtp = async () => {
+  const handleVerifyOtp = () => {
     if (!onboardOtp || onboardOtp.length < 4) {
       setOtpError("Enter the OTP code sent to your mobile");
       return;
     }
-
     setOtpError("");
     setOtpLoading(true);
-
-    try {
-      const cleaned = normalizeIndianMobile(onboardPhone);
-
-      const res = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned, otp: onboardOtp, name: customerName.trim() }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setOtpError(data.error ?? "Verification failed. Please check the OTP code.");
-        return;
+    // @ts-expect-error exposed by the MSG91 widget script
+    window.verifyOtp(
+      onboardOtp,
+      async (data: { message: string }) => {
+        try {
+          const res = await fetch("/api/auth/verify-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken: data.message, name: customerName.trim() }),
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            setOtpError(json.error ?? "Verification failed. Please check the OTP code.");
+            setOtpLoading(false);
+            return;
+          }
+          setLoggedIn(true);
+          setShowOnboarding(false);
+          await executeOrderSubmission();
+        } catch {
+          setOtpError("Verification failed. Please try again.");
+          setOtpLoading(false);
+        }
+      },
+      (err: unknown) => {
+        setOtpError("Invalid or expired OTP code.");
+        setOtpLoading(false);
+        console.error(err);
       }
-
-      setLoggedIn(true);
-      setShowOnboarding(false);
-
-      // Now place the order
-      await executeOrderSubmission();
-    } catch {
-      setOtpError("Verification failed. Please try again.");
-    } finally {
-      setOtpLoading(false);
-    }
+    );
   };
 
   if (!authChecked) {
@@ -419,7 +438,12 @@ export default function ConfirmOrderPage() {
 
   return (
     <div style={{ padding: "16px 16px 100px", maxWidth: "500px", margin: "0 auto" }} className="page-content">
-      <div id="onboard-recaptcha-container" />
+      {/* MSG91 widget captcha mount for this page */}
+      <div
+        id="msg91-captcha-order"
+        aria-hidden="true"
+        style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}
+      />
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>

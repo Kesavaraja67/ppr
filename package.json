@@ -22,8 +22,6 @@
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
-    "firebase": "^12.17.0",
-    "firebase-admin": "^14.2.0",
     "jose": "^6.2.3",
     "next": "16.2.11",
     "postgres": "^3.4.9",

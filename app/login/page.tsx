@@ -19,68 +19,90 @@ function LoginForm() {
 
   const otpInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSendOtp = async () => {
+  // Load MSG91 OTP Widget script with exposed methods so we can call
+  // window.sendOtp / window.verifyOtp directly from our own UI.
+  useEffect(() => {
+    const configuration = {
+      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
+      tokenAuth: process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH,
+      exposeMethods: true,
+      captchaRenderId: "msg91-captcha",
+      success: () => {},
+      failure: (err: unknown) => console.error("MSG91 widget error:", err),
+    };
+    const script = document.createElement("script");
+    script.src = "https://verify.msg91.com/otp-provider.js";
+    script.async = true;
+    script.onload = () => {
+      // @ts-expect-error global exposed by the MSG91 otp-provider script
+      window.initSendOTP(configuration);
+    };
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
+  const handleSendOtp = () => {
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
     }
-
     setError("");
     setLoading(true);
-
-    try {
-      const res = await fetch("/api/auth/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Failed to send OTP. Please try again.");
-        return;
+    // @ts-expect-error exposed by the MSG91 widget script
+    window.sendOtp(
+      `91${cleaned}`,
+      () => {
+        setStep("otp");
+        setLoading(false);
+        setTimeout(() => otpInputRef.current?.focus(), 100);
+      },
+      (err: unknown) => {
+        setError("Failed to send OTP. Please try again.");
+        setLoading(false);
+        console.error(err);
       }
-
-      setStep("otp");
-      setTimeout(() => otpInputRef.current?.focus(), 100);
-    } catch {
-      setError("Failed to send OTP. Please check your connection.");
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
-  const handleVerifyOtp = async (otpCode?: string) => {
+  const handleVerifyOtp = (otpCode?: string) => {
     const code = otpCode ?? otp;
     if (!code || code.length < 4) {
       setError("Enter the OTP sent to your phone");
       return;
     }
-
     setError("");
     setLoading(true);
-
-    try {
-      const cleaned = normalizeIndianMobile(phone);
-      const res = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: cleaned, otp: code }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Verification failed. Please check the OTP code.");
-        return;
+    // @ts-expect-error exposed by the MSG91 widget script
+    window.verifyOtp(
+      code,
+      async (data: { message: string }) => {
+        try {
+          const res = await fetch("/api/auth/verify-otp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken: data.message }),
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            setError(json.error ?? "Verification failed. Please check the OTP code.");
+            setLoading(false);
+            return;
+          }
+          router.replace(nextUrl);
+        } catch {
+          setError("Verification failed. Please try again.");
+          setLoading(false);
+        }
+      },
+      (err: unknown) => {
+        setError("Invalid or expired OTP code.");
+        setLoading(false);
+        console.error(err);
       }
-
-      router.replace(nextUrl);
-    } catch {
-      setError("Verification failed. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+    );
   };
 
   // WebOTP API — Android Chrome auto-fill
@@ -98,10 +120,10 @@ function LoginForm() {
           handleVerifyOtp(credential.code);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => controller.abort();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   const cleanedPhone = normalizeIndianMobile(phone);
@@ -115,6 +137,20 @@ function LoginForm() {
         flexDirection: "column",
       }}
     >
+      {/* MSG91 widget captcha mount — kept in DOM as required by the widget */}
+      <div
+        id="msg91-captcha"
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          width: 0,
+          height: 0,
+          overflow: "hidden",
+          opacity: 0,
+          pointerEvents: "none",
+        }}
+      />
+
       {/* Emerald top bar */}
       <div
         style={{
@@ -479,10 +515,6 @@ function LoginForm() {
                 setStep("phone");
                 setOtp("");
                 setError("");
-                confirmationRef.current = null;
-                // Clear verifier so a fresh reCAPTCHA renders on next send
-                recaptchaVerifierRef.current?.clear();
-                recaptchaVerifierRef.current = null;
               }}
             >
               ← Change phone number
@@ -490,24 +522,6 @@ function LoginForm() {
           </div>
         )}
       </div>
-
-      {/*
-        Invisible reCAPTCHA mount point — Firebase attaches its widget here.
-        Must NOT be display:none — use visually-hidden instead so the DOM
-        element is properly rendered when RecaptchaVerifier initialises.
-      */}
-      <div
-        id="recaptcha-container"
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          width: 0,
-          height: 0,
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
     </div>
   );
 }

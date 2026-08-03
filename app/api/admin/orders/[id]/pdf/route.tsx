@@ -3,7 +3,18 @@ import { db } from "@/lib/db";
 import { orders, order_items, vegetables, shop_config, users } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import React from "react";
-import { renderToBuffer, Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import path from "path";
+import { renderToBuffer, Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
+
+// Register a Tamil-capable font so Tamil names render correctly in the PDF.
+// Noto Sans Tamil (Tamil subset, weight 400, WOFF) supports all Tamil Unicode glyphs.
+Font.register({
+  family: "NotoSansTamil",
+  src: path.join(
+    process.cwd(),
+    "node_modules/@fontsource/noto-sans-tamil/files/noto-sans-tamil-tamil-400-normal.woff"
+  ),
+});
 
 const styles = StyleSheet.create({
   page: {
@@ -68,7 +79,7 @@ const styles = StyleSheet.create({
   tdRate: { width: "20%", textAlign: "right", fontSize: 7.5 },
   tdTotal: { width: "20%", textAlign: "right", fontFamily: "Helvetica-Bold", fontSize: 7.5 },
   itemEng: { fontFamily: "Helvetica-Bold", fontSize: 8 },
-  itemTa: { fontSize: 6.5, color: "#4b5563" },
+  itemTa: { fontSize: 7, color: "#4b5563", fontFamily: "NotoSansTamil" },
   totalsContainer: {
     borderTopWidth: 1,
     borderTopColor: "#000000",

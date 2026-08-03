@@ -60,116 +60,7 @@ Shop Contact: 94437 21544
 Thank you for shopping!`;
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
-// Builds narrow 80mm thermal receipt HTML (203 dpi, ~576px / 72mm width printable area)
-async function generatePDFData(order: Order, items: OrderItem[], shopName: string) {
-  const priced = items.filter((i) => i.price_per_unit !== null);
-  const rows = priced
-    .map(
-      (i) =>
-        `<tr>
-          <td style="padding:4px 2px;vertical-align:top;border-bottom:1px dotted #ccc;">
-            <div style="font-weight:bold;">${escapeHtml(i.name_en ?? "")}</div>
-            ${i.name_ta ? `<div style="font-size:10px;color:#333;">${escapeHtml(i.name_ta)}</div>` : ''}
-          </td>
-          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">${Number(i.requested_qty)} ${escapeHtml(i.unit)}</td>
-          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;">₹${Number(i.price_per_unit).toFixed(2)}</td>
-          <td style="padding:4px 2px;text-align:right;vertical-align:top;border-bottom:1px dotted #ccc;font-weight:bold;">₹${Number(i.line_total).toFixed(2)}</td>
-        </tr>`
-    )
-    .join("");
-
-  const subtotal = Number(order.subtotal ?? 0).toFixed(2);
-  const delivery = Number(order.delivery_charge ?? 0) === 0 ? "FREE" : `₹${Number(order.delivery_charge).toFixed(2)}`;
-  const total = Number(order.total_amount ?? 0).toFixed(2);
-
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Receipt - ${escapeHtml(order.id.slice(0, 8).toUpperCase())}</title>
-  <style>
-    @page { size: 80mm auto; margin: 0; }
-    body {
-      font-family: 'Courier New', Courier, monospace, sans-serif;
-      width: 72mm;
-      max-width: 576px;
-      margin: 0 auto;
-      padding: 10px 4px;
-      color: #000000;
-      background: #ffffff;
-      font-size: 11px;
-      line-height: 1.35;
-    }
-    .text-center { text-align: center; }
-    .text-right { text-align: right; }
-    .bold { font-weight: bold; }
-    .header { border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-    .header h1 { font-size: 16px; margin: 0 0 2px 0; text-transform: uppercase; }
-    .header p { margin: 2px 0; font-size: 10px; }
-    table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; }
-    th { text-align: left; border-bottom: 1px solid #000; padding: 4px 2px; font-size: 10px; text-transform: uppercase; }
-    .totals-table { border-top: 1px dashed #000; margin-top: 8px; padding-top: 6px; }
-    .totals-table td { border-bottom: none; padding: 3px 2px; }
-    .footer { border-top: 1px dashed #000; margin-top: 10px; padding-top: 8px; font-size: 10px; text-align: center; }
-  </style>
-</head>
-<body>
-  <div class="header text-center">
-    <h1>${escapeHtml(shopName)}</h1>
-    <p class="bold">FRESH FRUITS &amp; VEGETABLES</p>
-    <p>Delivery: ${escapeHtml(order.delivery_date)}</p>
-    <p>Order #${escapeHtml(order.id.slice(0, 8).toUpperCase())}</p>
-    ${order.user_phone ? `<p>Customer: ${escapeHtml(order.user_phone)}</p>` : ''}
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width:40%;">Item</th>
-        <th style="width:20%;text-align:right;">Qty</th>
-        <th style="width:20%;text-align:right;">Rate</th>
-        <th style="width:20%;text-align:right;">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
-
-  <table class="totals-table">
-    <tr>
-      <td colspan="2" style="font-weight:bold;">Subtotal:</td>
-      <td colspan="2" class="text-right bold">₹${subtotal}</td>
-    </tr>
-    <tr>
-      <td colspan="2">Delivery Charge:</td>
-      <td colspan="2" class="text-right">${delivery}</td>
-    </tr>
-    <tr style="font-size:13px;border-top:1px solid #000;">
-      <td colspan="2" class="bold" style="padding-top:6px;">GRAND TOTAL:</td>
-      <td colspan="2" class="text-right bold" style="padding-top:6px;">₹${total}</td>
-    </tr>
-  </table>
-
-  <div class="footer">
-    <p class="bold">Payment: CASH ON DELIVERY</p>
-    <p>Call / WhatsApp: 94437 21544</p>
-    <p style="margin-top:4px;">Thank you for shopping with us!</p>
-  </div>
-</body>
-</html>`;
-
-  return html;
-}
 
 export default function PricingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: orderId } = use(params);
@@ -198,6 +89,9 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
           if (item.price_per_unit) existing[item.id] = item.price_per_unit;
         }
         setPrices(existing);
+        // Show PDF actions immediately if the order is already finalized
+        const finalizedStatuses = ["priced", "dispatched", "delivered", "completed"];
+        if (finalizedStatuses.includes(d.order?.status)) setSaved(true);
       });
 
     fetch("/api/admin/settings")
@@ -265,15 +159,20 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     }
   };
 
-  const handlePrint = async () => {
+  const handleDownloadPdf = () => {
     if (!order) return;
-    const html = await generatePDFData(order, items, shopName);
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    win.print();
+    const pdfUrl = `/api/admin/orders/${order.id}/pdf?download=true`;
+    const a = document.createElement("a");
+    a.href = pdfUrl;
+    a.download = `P.P.R.-Bill-${order.delivery_date}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handlePrintPdf = () => {
+    if (!order) return;
+    window.open(`/api/admin/orders/${order.id}/pdf`, "_blank");
   };
 
   const handleShare = async () => {
@@ -283,13 +182,24 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
 
     try {
       const textBill = generateTextBill(order, items, shopName);
-      const html = await generatePDFData(order, items, shopName);
-      const blob = new Blob([html], { type: "text/html" });
-      const file = new File([blob], `P.P.R.-Bill-${order.delivery_date}.html`, { type: "text/html" });
+      const pdfRes = await fetch(`/api/admin/orders/${order.id}/pdf`);
+      // Validate response before treating the body as a PDF
+      const contentType = pdfRes.headers.get("content-type") ?? "";
+      if (!pdfRes.ok || !contentType.includes("application/pdf")) {
+        // Fall back to text-only share — still useful via WhatsApp
+        console.warn("PDF unavailable, falling back to text share");
+        const waText = encodeURIComponent(textBill);
+        window.open(`https://api.whatsapp.com/send?text=${waText}`, "_blank");
+        return;
+      }
+      const pdfBlob = await pdfRes.blob();
+      const file = new File([pdfBlob], `P.P.R.-Bill-${order.delivery_date}.pdf`, {
+        type: "application/pdf",
+      });
 
       let shared = false;
 
-      // 1. Try Web Share API (with files if supported, else text)
+      // 1. Try Web Share API (with PDF file if supported, else text)
       if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
         try {
           const canShareFile = navigator.canShare && navigator.canShare({ files: [file] });
@@ -309,14 +219,11 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         } catch (err: unknown) {
           const shareErr = err as { name?: string };
           if (shareErr?.name === "AbortError" || shareErr?.name === "NotAllowedError") {
-            // User cancelled the share dialog — return quietly, skip WhatsApp fallback
             return;
           }
           if (shareErr?.name === "InvalidStateError") {
-            // A previous share is still open (shouldn't happen with the ref guard, but be safe)
             return;
           }
-          // Other errors fall through to WhatsApp fallback
         }
       }
 
@@ -442,29 +349,48 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
           {saving ? "Saving…" : "Save & Finalise Bill"}
         </button>
       ) : (
-        <div style={{ display: "flex", gap: "10px" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={handleShare}
+              className="btn-accent"
+              style={{ flex: 1, justifyContent: "center" }}
+              disabled={sharing}
+            >
+              {sharing ? "Sharing…" : "Share Bill (PDF)"}
+            </button>
+            <button
+              onClick={handleDownloadPdf}
+              style={{
+                flex: 1,
+                padding: "14px",
+                border: "1.5px solid #166534",
+                borderRadius: "9999px",
+                background: "#f0fdf4",
+                color: "#166534",
+                fontWeight: 700,
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              Download PDF
+            </button>
+          </div>
           <button
-            onClick={handleShare}
-            className="btn-accent"
-            style={{ flex: 1, justifyContent: "center" }}
-            disabled={sharing}
-          >
-            {sharing ? "Sharing…" : "Share Bill"}
-          </button>
-          <button
-            onClick={handlePrint}
+            onClick={handlePrintPdf}
             style={{
-              flex: 1,
+              width: "100%",
               padding: "14px",
-              border: "1.5px solid #166534",
+              border: "1.5px solid #374151",
               borderRadius: "9999px",
               background: "#fff",
-              color: "#166534",
+              color: "#374151",
               fontWeight: 700,
               cursor: "pointer",
+              textAlign: "center",
             }}
           >
-            Download / Print
+            🖨️ Print PDF
           </button>
         </div>
       )}

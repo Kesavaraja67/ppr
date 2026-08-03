@@ -41,5 +41,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Firebase service account keys — contain private keys, NEVER commit
-*firebase-adminsdk*.json
+# Service account keys — contain private keys, NEVER commit
+*adminsdk*.json

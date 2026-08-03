@@ -28,33 +28,32 @@ GEMINI_API_KEY=...
 # Cron job protection secret
 CRON_SECRET=...
 
-# Firebase Phone Auth — Client SDK (must have NEXT_PUBLIC_ prefix to reach the browser)
-# From Firebase Console → Project Settings → General → Your apps → Web app
-NEXT_PUBLIC_FIREBASE_API_KEY=...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=...
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=...
+# MSG91 OTP Widget — Client Side Integration
+# From MSG91 Dashboard → OTP → Widgets → SecureOTPWidget7RBP → Client Side Integration
+NEXT_PUBLIC_MSG91_WIDGET_ID=...
+NEXT_PUBLIC_MSG91_TOKEN_AUTH=...
 
-# Firebase Admin SDK (server-only — NEVER expose to browser)
-# From Firebase Console → Project Settings → Service accounts → Generate new private key
-FIREBASE_PROJECT_ID=...
-FIREBASE_CLIENT_EMAIL=...
-FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+# MSG91 account Authkey (server-only — NEVER expose to browser)
+# From MSG91 Dashboard → Settings → Authkey
+MSG91_AUTH_KEY=...
 
 # App base URL (used for internal API calls)
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
 ```
 
-### Firebase Setup
+### MSG91 OTP Widget Setup
 
-1. Go to [Firebase Console](https://console.firebase.google.com/) and create a project (or use an existing one).
-2. Enable **Phone** sign-in under **Authentication → Sign-in method**.
-3. Register a **Web app** under **Project Settings → General → Your apps** and copy the
-   `apiKey`, `authDomain`, `projectId` into your `.env.local` as `NEXT_PUBLIC_FIREBASE_*`.
-4. Create a **service account** under **Project Settings → Service accounts → Generate new private key**
-   and paste the `project_id`, `client_email`, and `private_key` as `FIREBASE_*`.
-5. (Optional) Add test phone numbers under **Authentication → Sign-in method → Phone → Phone numbers for testing**
-   to skip real SMS during development.
-6. In production, Firebase sends SMS via its built-in SMS provider.
+OTP verification uses the **MSG91 OTP Widget** (`SecureOTPWidget7RBP`), which handles
+SMS delivery via MSG91's own default DLT-approved template — no DLT registration required.
+
+1. **Widget ID & Token Auth** — MSG91 Dashboard → OTP → Widgets → select your widget →
+   **Client Side Integration** tab. Copy `widgetId` → `NEXT_PUBLIC_MSG91_WIDGET_ID` and
+   `tokenAuth` → `NEXT_PUBLIC_MSG91_TOKEN_AUTH`.
+2. **Auth Key** — MSG91 Dashboard → Settings → Authkey. Copy into `MSG91_AUTH_KEY`
+   (server-only, never prefix with `NEXT_PUBLIC_`).
+3. The widget sends OTP client-side (`window.sendOtp`). After the user enters the code,
+   `window.verifyOtp` returns an **access-token** which is sent to
+   `POST /api/auth/verify-otp` for server-side confirmation before a session is issued.
 
 ## Database
 

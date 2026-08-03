@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { verifyMsg91Otp } from "@/lib/msg91";
+import { verifyMsg91AccessToken } from "@/lib/msg91";
+import { checkIpRateLimit, checkPhoneRateLimit, normalizeIndianMobile } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
@@ -9,12 +9,15 @@ const SESSION_DURATION_DAYS = 75;
 
 /**
  * POST /api/auth/verify-otp
+ * Body: { accessToken: string, name?: string }
  *
- * Body: { phone: "9876543210", otp: "123456", name?: string }
+ * The OTP itself was already verified client-side by the MSG91 widget.
+ * This endpoint verifies the resulting access-token server-side against
+ * MSG91 before trusting the phone number and issuing a session cookie.
  */
 export async function POST(req: NextRequest) {
   try {
-    let body: { phone?: string; otp?: string; name?: string };
+    let body: { accessToken?: string; name?: string };
     try {
       body = await req.json();
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -22,6 +25,11 @@ export async function POST(req: NextRequest) {
       }
     } catch {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+
+    const accessToken = body.accessToken?.trim() ?? "";
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing access token" }, { status: 400 });
     }
 
     if (body.name !== undefined && typeof body.name !== "string") {
@@ -35,42 +43,47 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const phone = body.phone?.trim() ?? "";
-    const otp = body.otp?.trim() ?? "";
-
-    const cleaned = normalizeIndianMobile(phone);
-
-    if (cleaned.length !== 10) {
+    // ── 1. IP rate-limit pre-flight — reject flooding BEFORE the MSG91 call ───────
+    const clientIp =
+      req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+      req.headers.get("x-real-ip") ??
+      "unknown";
+    if (!checkIpRateLimit(clientIp).allowed) {
       return NextResponse.json(
-        { error: "Enter a valid 10-digit Indian mobile number" },
-        { status: 400 }
+        { error: "Too many verification attempts. Please try again later." },
+        { status: 429 }
       );
     }
 
-    if (!otp) {
-      return NextResponse.json(
-        { error: "OTP code is required" },
-        { status: 400 }
-      );
-    }
-
-    // ── 1. Verify OTP with MSG91 ──────────────────────────────────────────────
-    const verifyResult = await verifyMsg91Otp(cleaned, otp);
+    // ── 2. Verify access-token with MSG91 ─────────────────────────────────────
+    const verifyResult = await verifyMsg91AccessToken(accessToken);
     if (!verifyResult.success) {
+      return NextResponse.json({ error: verifyResult.error }, { status: 401 });
+    }
+
+    // MSG91 returns the verified phone as digits e.g. "919876543210"
+    const tenDigit = normalizeIndianMobile(verifyResult.phone);
+    if (tenDigit.length !== 10) {
       return NextResponse.json(
-        { error: verifyResult.error ?? "Invalid or expired OTP code" },
-        { status: 401 }
+        { error: "Could not resolve verified phone number" },
+        { status: 500 }
       );
     }
+
+    // ── 3. Phone rate-limit check (now that we have the resolved number) ────────
+    if (!checkPhoneRateLimit(tenDigit).allowed) {
+      return NextResponse.json(
+        { error: "Too many verification attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
+
+    const expectedPhone = `+91${tenDigit}`;
 
     // ── 2. Upsert user in database ────────────────────────────────────────────
-    const expectedPhone = `+91${cleaned}`;
     const [upsertedUser] = await db
       .insert(users)
-      .values({
-        phone_number: expectedPhone,
-        name: submittedName || null,
-      })
+      .values({ phone_number: expectedPhone, name: submittedName || null })
       .onConflictDoUpdate({
         target: users.phone_number,
         set: submittedName ? { name: submittedName } : { phone_number: expectedPhone },
@@ -78,14 +91,12 @@ export async function POST(req: NextRequest) {
       .returning({ id: users.id });
 
     const userId = upsertedUser?.id;
-
     if (!userId) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
     }
 
     // ── 3. Issue customer session cookie ──────────────────────────────────────
     const token = await createCustomerSession(userId);
-
     const response = NextResponse.json({ success: true, userId });
     response.cookies.set(CUSTOMER_SESSION_COOKIE, token, {
       httpOnly: true,
@@ -94,7 +105,6 @@ export async function POST(req: NextRequest) {
       maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
       path: "/",
     });
-
     return response;
   } catch (globalErr: unknown) {
     console.error("verify-otp unhandled server error:", globalErr);

@@ -10,10 +10,9 @@
  * This module provides:
  *  1. `normalizeIndianMobile(input)` — shared phone-number normaliser used by
  *     client components and the verify-otp route.
- *  2. `checkOTPRateLimit(phone, ip)` — a best-effort server-side guard on the
- *     verify route so a stolen access-token cannot be replayed en-masse.
- *     Uses in-process Maps; resets on serverless cold-start — acceptable
- *     because MSG91's own widget abuse protection is the primary hard limit.
+ *  2. `checkOTPRateLimit(phone, ip)` — combined phone+IP guard (kept for compat).
+ *  3. `checkIpRateLimit(ip)` — IP-only pre-flight, call BEFORE the MSG91 request.
+ *  4. `checkPhoneRateLimit(phone)` — phone-only check, call AFTER phone is resolved.
  *
  * Rate limit: max 3 verify attempts per phone number AND per IP per 10-min window.
  */
@@ -88,5 +87,36 @@ export function checkOTPRateLimit(
 
   checkAndRecord(phoneRateMap, normalizedPhone);
   checkAndRecord(ipRateMap, ip);
+  return { allowed: true };
+}
+
+/**
+ * IP-only rate-limit check — call BEFORE the MSG91 verify request so a
+ * flood of attempts does not consume MSG91 quota.
+ */
+export function checkIpRateLimit(
+  ip: string
+): { allowed: boolean } {
+  const now = Date.now();
+  const entry = ipRateMap.get(ip);
+  const count = entry && now - entry.windowStart <= WINDOW_MS ? entry.count : 0;
+  if (count >= MAX_ATTEMPTS) return { allowed: false };
+  checkAndRecord(ipRateMap, ip);
+  return { allowed: true };
+}
+
+/**
+ * Phone-only rate-limit check — call AFTER the phone is resolved from MSG91
+ * to guard against replayed access-tokens for a specific number.
+ */
+export function checkPhoneRateLimit(
+  phone: string
+): { allowed: boolean } {
+  const normalizedPhone = phone.replace(/\D/g, "");
+  const now = Date.now();
+  const entry = phoneRateMap.get(normalizedPhone);
+  const count = entry && now - entry.windowStart <= WINDOW_MS ? entry.count : 0;
+  if (count >= MAX_ATTEMPTS) return { allowed: false };
+  checkAndRecord(phoneRateMap, normalizedPhone);
   return { allowed: true };
 }

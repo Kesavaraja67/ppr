@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyMsg91AccessToken } from "@/lib/msg91";
-import { checkOTPRateLimit, normalizeIndianMobile } from "@/lib/auth-helpers";
+import { checkIpRateLimit, checkPhoneRateLimit, normalizeIndianMobile } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
 import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
@@ -43,11 +43,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ── 1. Rate-limit guard (phone resolved later; use IP-only pre-flight) ─────
+    // ── 1. IP rate-limit pre-flight — reject flooding BEFORE the MSG91 call ───────
     const clientIp =
       req.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
       req.headers.get("x-real-ip") ??
       "unknown";
+    if (!checkIpRateLimit(clientIp).allowed) {
+      return NextResponse.json(
+        { error: "Too many verification attempts. Please try again later." },
+        { status: 429 }
+      );
+    }
 
     // ── 2. Verify access-token with MSG91 ─────────────────────────────────────
     const verifyResult = await verifyMsg91AccessToken(accessToken);
@@ -64,9 +70,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Apply rate limit using the now-resolved phone number
-    const rateCheck = checkOTPRateLimit(tenDigit, clientIp);
-    if (!rateCheck.allowed) {
+    // ── 3. Phone rate-limit check (now that we have the resolved number) ────────
+    if (!checkPhoneRateLimit(tenDigit).allowed) {
       return NextResponse.json(
         { error: "Too many verification attempts. Please try again later." },
         { status: 429 }

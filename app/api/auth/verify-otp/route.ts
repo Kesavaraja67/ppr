@@ -3,9 +3,8 @@ import { verifyMsg91AccessToken } from "@/lib/msg91";
 import { checkIpRateLimit, checkPhoneRateLimit, normalizeIndianMobile } from "@/lib/auth-helpers";
 import { db } from "@/lib/db";
 import { users } from "@/drizzle/schema";
-import { createCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
+import { createCustomerSession, CUSTOMER_SESSION_COOKIE, SESSION_DURATION_DAYS } from "@/lib/customer-auth";
 
-const SESSION_DURATION_DAYS = 75;
 
 /**
  * POST /api/auth/verify-otp
@@ -88,14 +87,20 @@ export async function POST(req: NextRequest) {
         target: users.phone_number,
         set: submittedName ? { name: submittedName } : { phone_number: expectedPhone },
       })
-      .returning({ id: users.id });
+      .returning({ id: users.id, created_at: users.created_at });
 
     const userId = upsertedUser?.id;
     if (!userId) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
     }
 
-    // ── 3. Issue customer session cookie ──────────────────────────────────────
+    // Instrumentation: distinguish new sign-up vs returning login for analytics
+    const isNewUser =
+      upsertedUser.created_at !== null &&
+      Date.now() - new Date(upsertedUser.created_at).getTime() < 5_000;
+    console.info(`[otp-verify] ${isNewUser ? "new" : "returning"} user: ${userId}`);
+
+
     const token = await createCustomerSession(userId);
     const response = NextResponse.json({ success: true, userId });
     response.cookies.set(CUSTOMER_SESSION_COOKIE, token, {

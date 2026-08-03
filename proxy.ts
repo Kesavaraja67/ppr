@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession, SESSION_COOKIE } from "@/lib/auth";
-import { verifyCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
+import {
+  verifyCustomerSessionWithExp,
+  renewCustomerSession,
+  CUSTOMER_SESSION_COOKIE,
+  SESSION_DURATION_DAYS,
+} from "@/lib/customer-auth";
+
+/** Slide the window when fewer than this many days remain on the session. */
+const SESSION_RENEWAL_THRESHOLD_DAYS = 37.5;
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Always sanitize incoming headers to prevent client header spoofing
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete("x-admin-id");
+  requestHeaders.delete("x-customer-id");
 
   // ── Admin route guard (/manage/*, /api/admin/*) ───────────────────────────
   if (pathname.startsWith("/manage") || pathname.startsWith("/api/admin")) {
     // Login page itself and login API route are unprotected
     if (pathname === "/manage" || pathname === "/api/admin/auth") {
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
 
     const token = request.cookies.get(SESSION_COOKIE)?.value;
@@ -34,7 +47,6 @@ export async function proxy(request: NextRequest) {
       return response;
     }
 
-    const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-admin-id", session.adminId);
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
@@ -57,7 +69,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    const session = await verifyCustomerSession(token);
+    const session = await verifyCustomerSessionWithExp(token);
     if (!session) {
       if (pathname.startsWith("/api/")) {
         const response = NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -72,13 +84,35 @@ export async function proxy(request: NextRequest) {
     }
 
     // Inject customer ID for downstream API routes
-    const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-customer-id", session.userId);
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    const customerResponse = NextResponse.next({ request: { headers: requestHeaders } });
+
+    // Sliding-window renewal: if fewer than SESSION_RENEWAL_THRESHOLD_DAYS remain,
+    // transparently mint a fresh 75-day token and set it on the response.
+    try {
+      const nowSec = Math.floor(Date.now() / 1000);
+      const remainingDays = (session.exp - nowSec) / 86_400;
+      if (remainingDays < SESSION_RENEWAL_THRESHOLD_DAYS) {
+        const newToken = await renewCustomerSession(session.userId);
+        customerResponse.cookies.set(CUSTOMER_SESSION_COOKIE, newToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
+          path: "/",
+        });
+      }
+    } catch (renewErr) {
+      console.error("Session renewal error in proxy middleware:", renewErr);
+    }
+
+    return customerResponse;
+
   }
 
-  return NextResponse.next();
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
+
 
 export const config = {
   matcher: [

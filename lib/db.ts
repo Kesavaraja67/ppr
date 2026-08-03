@@ -10,5 +10,8 @@ const connectionString =
 
 neonConfig.webSocketConstructor = ws;
 
-const pool = new Pool({ connectionString });
+// max: 1 — each serverless invocation uses at most one DB connection.
+// Without this, the pool can open multiple connections per cold-start,
+// quickly exhausting Neon's free-tier limit (5–20 connections).
+const pool = new Pool({ connectionString, max: 1 });
 export const db = drizzle(pool, { schema });

@@ -68,7 +68,7 @@ export default function ShopDetailsPage() {
       .then((d) => {
         if (!d.error) setConfig(d);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const shopName = config?.shop_name ?? "P.P.R. Fruits & Vegetables";
@@ -78,12 +78,12 @@ export default function ShopDetailsPage() {
   const coveredAreas = config?.covered_areas?.length
     ? config.covered_areas
     : [
-        "Thudiyalur",
-        "Vadamadurai (K. Vadamadurai)",
-        "Sengalipalayam",
-        "Thoppampatti Pirivu",
-        "Maruthi Nagar",
-      ];
+      "Thudiyalur",
+      "Vadamadurai (K. Vadamadurai)",
+      "Sengalipalayam",
+      "Thoppampatti Pirivu",
+      "Maruthi Nagar",
+    ];
 
   return (
     <div className="page-content">
@@ -178,12 +178,13 @@ export default function ShopDetailsPage() {
             </li>
             <li style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f3f4f6", paddingBottom: "6px" }}>
               <span style={{ color: "#6b7280" }}>Daily Order Cutoff:</span>
-              <span style={{ fontWeight: 600 }}>10:00 PM every night</span>
+              <span style={{ fontWeight: 600 }}>8:00 PM every night</span>
             </li>
             <li style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ color: "#6b7280" }}>Delivery Time:</span>
-              <span style={{ fontWeight: 600 }}>Next morning to your doorstep</span>
+              <span style={{ fontWeight: 600 }}>Next morning to your doorstep (after 10 AM)</span>
             </li>
+
           </ul>
         </div>
 

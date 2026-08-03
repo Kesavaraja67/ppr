@@ -8,6 +8,10 @@ import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
 import { useMsg91Widget } from "@/hooks/useMsg91Widget";
 
+/** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
+const OTP_TIMEOUT_MS = 15_000;
+
+
 interface SavedAddress {
   id: string;
   full_address: string;
@@ -351,16 +355,31 @@ export default function ConfirmOrderPage() {
     }
     setOtpError("");
     setOtpLoading(true);
+
+    let timedOut = false;
+    const verifyTimer = setTimeout(() => {
+      timedOut = true;
+      setOtpError("Verification timed out. Please try again.");
+      setOtpLoading(false);
+    }, OTP_TIMEOUT_MS);
+
     // @ts-expect-error exposed by the MSG91 widget script
     window.verifyOtp(
       onboardOtp,
       async (data: { message: string }) => {
+        if (timedOut) return;
+        clearTimeout(verifyTimer);
         try {
+          const controller = new AbortController();
+          const fetchTimer = setTimeout(() => controller.abort(), OTP_TIMEOUT_MS);
           const res = await fetch("/api/auth/verify-otp", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ accessToken: data.message, name: customerName.trim() }),
+            signal: controller.signal,
           });
+          clearTimeout(fetchTimer);
+          if (timedOut) return;
           const json = await res.json();
           if (!res.ok) {
             setOtpError(json.error ?? "Verification failed. Please check the OTP code.");
@@ -370,18 +389,27 @@ export default function ConfirmOrderPage() {
           setLoggedIn(true);
           setShowOnboarding(false);
           await executeOrderSubmission();
-        } catch {
-          setOtpError("Verification failed. Please try again.");
+        } catch (e) {
+          if (timedOut) return;
+          const isAbort = e instanceof Error && e.name === "AbortError";
+          setOtpError(
+            isAbort
+              ? "Verification timed out. Please check your connection."
+              : "Verification failed. Please try again."
+          );
           setOtpLoading(false);
         }
       },
       (err: unknown) => {
+        if (timedOut) return;
+        clearTimeout(verifyTimer);
         setOtpError("Invalid or expired OTP code.");
         setOtpLoading(false);
         console.error(err);
       }
     );
   };
+
 
   if (!authChecked) {
     return (
@@ -555,7 +583,15 @@ export default function ConfirmOrderPage() {
                     onChange={() => setSelectedAddressId(addr.id)}
                     style={{ marginTop: "3px" }}
                   />
-                  <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
+                    {addr.is_within_range && (
+                      <span style={{ fontSize: "0.72rem", color: "#1A6B47", fontWeight: 600 }}>
+                        ✓ Verified within {shopCoords?.radius ?? 3}km delivery zone
+                      </span>
+                    )}
+                  </div>
+
                 </label>
               ))}
             </div>

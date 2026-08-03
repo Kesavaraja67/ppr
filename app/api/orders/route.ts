@@ -14,6 +14,20 @@ function isWithinOrderWindow(): boolean {
   return h >= 8 && h < 20;
 }
 
+/** Helper to check if given lat/long coordinates are within shop delivery range */
+async function isAddressWithinDeliveryRange(
+  lat: number,
+  long: number,
+  fallbackWithinRange = false
+): Promise<{ withinRange: boolean; radiusKm: number }> {
+  const [shopConf] = await db.select().from(shop_config).limit(1);
+  const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
+  const withinRange = shopConf
+    ? haversineDistance(lat, long, Number(shopConf.lat), Number(shopConf.long)) <= radiusKm
+    : fallbackWithinRange;
+  return { withinRange, radiusKm };
+}
+
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
   const session = await getCustomerSession();
@@ -38,6 +52,8 @@ export async function POST(req: NextRequest) {
     };
     items: Array<{ veg_id: string; qty: number; unit: string }>;
     name?: string;
+    /** Client-generated UUID to prevent duplicate orders on network retry. */
+    client_request_id?: string;
   };
 
   try {
@@ -66,16 +82,11 @@ export async function POST(req: NextRequest) {
 
   if (body.new_address) {
     // Recompute delivery-zone check server-side — never trust the client value
-    const [shopConf] = await db.select().from(shop_config).limit(1);
-    const radiusKm = shopConf ? Number(shopConf.delivery_radius_km) : 3;
-    const withinRange = shopConf
-      ? haversineDistance(
-          body.new_address.lat,
-          body.new_address.long,
-          Number(shopConf.lat),
-          Number(shopConf.long)
-        ) <= radiusKm
-      : false;
+    const { withinRange } = await isAddressWithinDeliveryRange(
+      body.new_address.lat,
+      body.new_address.long,
+      false
+    );
 
     if (!withinRange) {
       return NextResponse.json(
@@ -100,7 +111,7 @@ export async function POST(req: NextRequest) {
 
     addressId = savedAddress.id;
   } else if (body.address_id) {
-    // Verify address belongs to this user and is within range
+    // Verify address belongs to this user
     const [addr] = await db
       .select()
       .from(addresses)
@@ -113,14 +124,37 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Address not found" }, { status: 404 });
     }
 
-    if (!addr.is_within_range) {
+    // Re-verify delivery range server-side against current shop config.
+    const { withinRange: withinRangeNow } = await isAddressWithinDeliveryRange(
+      Number(addr.lat),
+      Number(addr.long),
+      addr.is_within_range
+    );
+
+    if (!withinRangeNow) {
+      // Self-heal stale flag so the UI reflects reality on next fetch
+      if (addr.is_within_range) {
+        await db
+          .update(addresses)
+          .set({ is_within_range: false })
+          .where(eq(addresses.id, addr.id));
+      }
       return NextResponse.json(
-        { error: "This address is outside our delivery zone" },
+        { error: "This address is outside our current delivery zone." },
         { status: 422 }
       );
     }
 
+    // Self-heal: flag was false but address is now in range (radius expanded)
+    if (!addr.is_within_range) {
+      await db
+        .update(addresses)
+        .set({ is_within_range: true })
+        .where(eq(addresses.id, addr.id));
+    }
+
     addressId = addr.id;
+
   } else {
     return NextResponse.json({ error: "Address is required" }, { status: 400 });
   }
@@ -133,13 +167,14 @@ export async function POST(req: NextRequest) {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const deliveryDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
 
-  // Cancellable until 10:00 PM today (IST) = 22:00 IST = 16:30 UTC
+  // Cancellable until 8:00 PM today (IST) = 20:00 IST
   const cancellableUntilIST = new Date(
-    `${nowIST.getFullYear()}-${String(nowIST.getMonth() + 1).padStart(2, "0")}-${String(nowIST.getDate()).padStart(2, "0")}T22:00:00+05:30`
+    `${nowIST.getFullYear()}-${String(nowIST.getMonth() + 1).padStart(2, "0")}-${String(nowIST.getDate()).padStart(2, "0")}T20:00:00+05:30`
   );
-  // If it's already past 10 PM, order can't be cancelled (cutoff passed immediately)
+  // If it's already past 8 PM, order can't be cancelled (cutoff passed immediately)
   // We still allow order creation, just with cancellable_until in the past
   const cancellableUntil = cancellableUntilIST;
+
 
   // Verify all vegetable IDs exist
   const vegIds = body.items.map((i) => i.veg_id);
@@ -168,32 +203,79 @@ export async function POST(req: NextRequest) {
       .where(eq(users.id, session.userId));
   }
 
+  // Idempotency check — return existing order if client_request_id was already used by this user
+  if (body.client_request_id) {
+    const [existingOrder] = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.client_request_id, body.client_request_id),
+          eq(orders.user_id, session.userId)
+        )
+      )
+      .limit(1);
+    if (existingOrder) {
+      // Return 200 (not 201) to signal idempotent replay — order already exists
+      return NextResponse.json({ orderId: existingOrder.id });
+    }
+  }
+
   // Create order + order_items in a single transaction
-  const result = await db.transaction(async (tx) => {
-    const [order] = await tx
-      .insert(orders)
-      .values({
-        user_id: session.userId,
-        address_id: addressId,
-        delivery_date: deliveryDate,
-        cancellable_until: cancellableUntil,
-      })
-      .returning({ id: orders.id });
+  try {
+    const result = await db.transaction(async (tx) => {
+      const [order] = await tx
+        .insert(orders)
+        .values({
+          user_id: session.userId,
+          address_id: addressId,
+          delivery_date: deliveryDate,
+          cancellable_until: cancellableUntil,
+          client_request_id: body.client_request_id || null,
+        })
+        .returning({ id: orders.id });
 
-    await tx.insert(order_items).values(
-      body.items.map((item) => ({
-        order_id: order.id,
-        veg_id: item.veg_id,
-        requested_qty: String(item.qty),
-        unit: item.unit || vegMap.get(item.veg_id) || "kg",
-      }))
+      await tx.insert(order_items).values(
+        body.items.map((item) => ({
+          order_id: order.id,
+          veg_id: item.veg_id,
+          requested_qty: String(item.qty),
+          unit: item.unit || vegMap.get(item.veg_id) || "kg",
+        }))
+      );
+
+      return order;
+    });
+
+    return NextResponse.json({ orderId: result.id }, { status: 201 });
+  } catch (err: unknown) {
+    // Handle Postgres unique violation (code 23505) for concurrent duplicate submission
+    const isUniqueViolation =
+      typeof err === "object" && err !== null && "code" in err && err.code === "23505";
+    if (isUniqueViolation && body.client_request_id) {
+      const [existingOrder] = await db
+        .select({ id: orders.id })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.client_request_id, body.client_request_id),
+            eq(orders.user_id, session.userId)
+          )
+        )
+        .limit(1);
+      if (existingOrder) {
+        return NextResponse.json({ orderId: existingOrder.id });
+      }
+    }
+    console.error("Order creation transaction error:", err);
+    return NextResponse.json(
+      { error: "Failed to create order. Please try again." },
+      { status: 500 }
     );
+  }
 
-    return order;
-  });
-
-  return NextResponse.json({ orderId: result.id }, { status: 201 });
 }
+
 
 // ─── GET /api/orders — list user's orders ────────────────────────────────────
 export async function GET() {
@@ -217,27 +299,40 @@ export async function GET() {
     .where(eq(orders.user_id, session.userId))
     .orderBy(desc(orders.created_at));
 
-  // For each order, fetch its items with vegetable details
-  const ordersWithItems = await Promise.all(
-    userOrders.map(async (order) => {
-      const items = await db
-        .select({
-          id: order_items.id,
-          veg_id: order_items.veg_id,
-          requested_qty: order_items.requested_qty,
-          unit: order_items.unit,
-          price_per_unit: order_items.price_per_unit,
-          line_total: order_items.line_total,
-          name_en: vegetables.name_en,
-          name_ta: vegetables.name_ta,
-        })
-        .from(order_items)
-        .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
-        .where(eq(order_items.order_id, order.id));
+  if (userOrders.length === 0) {
+    return NextResponse.json({ orders: [] });
+  }
 
-      return { ...order, items };
+  // Batch-fetch all items for all orders in a single query (eliminates N+1)
+  const orderIds = userOrders.map((o) => o.id);
+  const allItems = await db
+    .select({
+      order_id: order_items.order_id,
+      id: order_items.id,
+      veg_id: order_items.veg_id,
+      requested_qty: order_items.requested_qty,
+      unit: order_items.unit,
+      price_per_unit: order_items.price_per_unit,
+      line_total: order_items.line_total,
+      name_en: vegetables.name_en,
+      name_ta: vegetables.name_ta,
     })
-  );
+    .from(order_items)
+    .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
+    .where(inArray(order_items.order_id, orderIds));
+
+  // Group items by order_id in memory
+  const itemsByOrder = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    const key = item.order_id ?? "";
+    if (!itemsByOrder.has(key)) itemsByOrder.set(key, []);
+    itemsByOrder.get(key)!.push(item);
+  }
+
+  const ordersWithItems = userOrders.map((order) => ({
+    ...order,
+    items: itemsByOrder.get(order.id) ?? [],
+  }));
 
   return NextResponse.json({ orders: ordersWithItems });
 }

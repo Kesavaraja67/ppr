@@ -3,7 +3,11 @@ import { vegetables, shop_config } from "@/drizzle/schema";
 import { eq, asc } from "drizzle-orm";
 import CatalogClient from "@/components/CatalogClient";
 
+// Force dynamic rendering so CI build doesn't attempt DB static prerendering
 export const dynamic = "force-dynamic";
+
+
+
 
 export default async function CatalogPage() {
   const [vegsResult, configResult] = await Promise.all([

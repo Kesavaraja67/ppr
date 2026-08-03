@@ -42,8 +42,14 @@ interface RateLimitEntry {
   windowStart: number;
 }
 
+// NOTE: These in-memory maps are process-local. In a serverless environment
+// (Vercel, AWS Lambda) each function instance has its own map — a determined
+// attacker can bypass this by hitting different cold instances.
+// TODO(scale): replace with a shared store (Upstash Redis / Vercel KV) once
+// volume justifies the cost (~₹0 on free tier for this traffic level).
 const phoneRateMap = new Map<string, RateLimitEntry>();
 const ipRateMap = new Map<string, RateLimitEntry>();
+
 
 /** Sweep expired entries from a rate-limit map to bound memory growth. */
 function evictExpired(map: Map<string, RateLimitEntry>): void {

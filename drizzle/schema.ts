@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   date,
+  index,
 } from "drizzle-orm/pg-core";
 
 // ─── admins ──────────────────────────────────────────────────────────────────
@@ -99,42 +100,63 @@ export const users = pgTable("users", {
 });
 
 // ─── addresses ───────────────────────────────────────────────────────────────
-export const addresses = pgTable("addresses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  user_id: uuid("user_id").references(() => users.id),
-  full_address: text("full_address").notNull(),
-  lat: numeric("lat", { mode: "number" }).notNull(),
-  long: numeric("long", { mode: "number" }).notNull(),
-  // Computed at save time using Haversine against shop_config coordinates + radius
-  is_within_range: boolean("is_within_range").notNull(),
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const addresses = pgTable(
+  "addresses",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    user_id: uuid("user_id").references(() => users.id),
+    full_address: text("full_address").notNull(),
+    lat: numeric("lat", { mode: "number" }).notNull(),
+    long: numeric("long", { mode: "number" }).notNull(),
+    // Computed at save time using Haversine against shop_config coordinates + radius
+    is_within_range: boolean("is_within_range").notNull(),
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (t) => [index("idx_addresses_user_id").on(t.user_id)]
+);
 
 // ─── orders ───────────────────────────────────────────────────────────────────
 // Every order is for next-day delivery. Prices are null until admin prices the order.
-export const orders = pgTable("orders", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  user_id: uuid("user_id").references(() => users.id),
-  address_id: uuid("address_id").references(() => addresses.id),
-  delivery_date: date("delivery_date").notNull(), // always tomorrow relative to created_at
-  status: text("status").notNull().default("pending"),
-  // 'pending' | 'cancelled' | 'priced' | 'out_for_delivery' | 'delivered'
-  subtotal: numeric("subtotal"),              // null until admin prices
-  delivery_charge: numeric("delivery_charge"), // null until admin prices
-  total_amount: numeric("total_amount"),       // null until admin prices
-  cancellable_until: timestamp("cancellable_until", { withTimezone: true }).notNull(),
-  // 10:00 PM on day of placement
-  created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  priced_at: timestamp("priced_at", { withTimezone: true }),
-});
+export const orders = pgTable(
+  "orders",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    user_id: uuid("user_id").references(() => users.id),
+    address_id: uuid("address_id").references(() => addresses.id),
+    delivery_date: date("delivery_date").notNull(), // always tomorrow relative to created_at
+    status: text("status").notNull().default("pending"),
+    // 'pending' | 'cancelled' | 'priced' | 'out_for_delivery' | 'delivered'
+    subtotal: numeric("subtotal"),              // null until admin prices
+    delivery_charge: numeric("delivery_charge"), // null until admin prices
+    total_amount: numeric("total_amount"),       // null until admin prices
+    cancellable_until: timestamp("cancellable_until", { withTimezone: true }).notNull(),
+    // 10:00 PM on day of placement
+    created_at: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    priced_at: timestamp("priced_at", { withTimezone: true }),
+    // Client-generated UUID for idempotent order submission (prevents duplicate orders
+    // on network retries / double-taps). Null for orders placed before this field was added.
+    client_request_id: text("client_request_id").unique(),
+  },
+  (t) => [
+    index("idx_orders_user_id").on(t.user_id),
+    index("idx_orders_address_id").on(t.address_id),
+  ]
+);
 
-// ─── order_items ──────────────────────────────────────────────────────────────
-export const order_items = pgTable("order_items", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  order_id: uuid("order_id").references(() => orders.id),
-  veg_id: uuid("veg_id").references(() => vegetables.id),
-  requested_qty: numeric("requested_qty").notNull(), // minimum 1 per spec
-  unit: text("unit").notNull(),
-  price_per_unit: numeric("price_per_unit"), // null until admin prices
-  line_total: numeric("line_total"),          // null until admin prices
-});
+// ─── order_items ─────────────────────────────────────────────────────────────────────
+export const order_items = pgTable(
+  "order_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    order_id: uuid("order_id").references(() => orders.id),
+    veg_id: uuid("veg_id").references(() => vegetables.id),
+    requested_qty: numeric("requested_qty").notNull(), // minimum 1 per spec
+    unit: text("unit").notNull(),
+    price_per_unit: numeric("price_per_unit"), // null until admin prices
+    line_total: numeric("line_total"),          // null until admin prices
+  },
+  (t) => [
+    index("idx_order_items_order_id").on(t.order_id),
+    index("idx_order_items_veg_id").on(t.veg_id),
+  ]
+);

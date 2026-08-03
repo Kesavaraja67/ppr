@@ -30,10 +30,18 @@ Edit `.env.local`:
 ```env
 DATABASE_URL=<your Neon connection string>
 ADMIN_JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
+CUSTOMER_JWT_SECRET=<generate with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))">
 GEMINI_API_KEY=<your Gemini API key from aistudio.google.com>
-CRON_SECRET=<any random string, e.g. openssl rand -hex 16>
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
+
+# MSG91 OTP Widget — OTP → Widgets → SecureOTPWidget7RBP → Client Side Integration
+NEXT_PUBLIC_MSG91_WIDGET_ID=<your widget ID>
+NEXT_PUBLIC_MSG91_TOKEN_AUTH=<your widget token auth>
+# MSG91 account Authkey — Settings → Authkey (server-only, never prefix with NEXT_PUBLIC_)
+MSG91_AUTH_KEY=<your MSG91 authkey>
 ```
+
+> ⚠️ **ADMIN_JWT_SECRET and CUSTOMER_JWT_SECRET must both be set** — the app will throw at startup if either is missing. Use different values for each.
 
 ---
 
@@ -75,9 +83,20 @@ Required env vars in Vercel:
 
 - `DATABASE_URL`
 - `ADMIN_JWT_SECRET`
+- `CUSTOMER_JWT_SECRET`
 - `GEMINI_API_KEY`
-- `CRON_SECRET`
 - `NEXT_PUBLIC_BASE_URL` → set to your Vercel URL
+- `NEXT_PUBLIC_MSG91_WIDGET_ID`
+- `NEXT_PUBLIC_MSG91_TOKEN_AUTH`
+- `MSG91_AUTH_KEY`
+
+### Post-Deploy Security Checklist
+
+- [ ] `ADMIN_JWT_SECRET` is a random 32+ character hex string (not a dictionary word)
+- [ ] `CUSTOMER_JWT_SECRET` is a different random 32+ character hex string
+- [ ] Admin PIN has been changed from the default `1234`
+- [ ] `MSG91_AUTH_KEY` is set only on Vercel (not in client-side env vars)
+- [ ] Neon database is set to require SSL (`sslmode=require` in connection string)
 
 ---
 
@@ -108,8 +127,9 @@ These are placeholders that need real images before launch:
 
 ## Architecture Notes
 
-- **ISR**: Catalog regenerates every 2 minutes + immediately on any admin write
+- **ISR**: Catalog regenerates on any admin write + 30s fallback revalidation
 - **Polling**: Open browser tabs check `/api/last-updated` every 25s — auto-refresh if stale
 - **Service Worker**: NetworkFirst for pages (3s timeout), CacheFirst for static assets
 - **AI blurb**: Runs daily at 6 AM IST via Vercel Cron — no action needed
 - **Tamil auto-fill**: Triggered when admin blurs the "English name" field on Add New Item
+- **iOS PWA note**: iOS may clear session cookies when the PWA is removed from the home screen or device storage is under pressure. Users will need to re-authenticate via OTP in this case — this is a platform limitation.

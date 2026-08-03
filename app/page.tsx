@@ -3,7 +3,9 @@ import { vegetables, shop_config } from "@/drizzle/schema";
 import { eq, asc } from "drizzle-orm";
 import CatalogClient from "@/components/CatalogClient";
 
-export const dynamic = "force-dynamic";
+// ISR: page is cached and regenerated on demand via revalidatePath() from admin
+// mutation routes, plus a 30-second fallback for safety.
+export const revalidate = 30;
 
 export default async function CatalogPage() {
   const [vegsResult, configResult] = await Promise.all([

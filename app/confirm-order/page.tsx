@@ -555,7 +555,10 @@ export default function ConfirmOrderPage() {
                     onChange={() => setSelectedAddressId(addr.id)}
                     style={{ marginTop: "3px" }}
                   />
-                  <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+                    <span style={{ fontSize: "0.88rem", color: "var(--text-primary)", lineHeight: 1.4 }}>{addr.full_address}</span>
+                    <span style={{ fontSize: "0.72rem", color: "#1A6B47", fontWeight: 600 }}>✓ Verified within 3km delivery zone</span>
+                  </div>
                 </label>
               ))}
             </div>

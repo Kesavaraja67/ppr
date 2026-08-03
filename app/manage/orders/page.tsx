@@ -296,24 +296,39 @@ export default function AdminOrdersPage() {
           marginBottom: "16px",
         }}
       >
-        {(["orders", "shopping"] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            style={{
-              flex: 1,
-              padding: "10px",
-              border: "none",
-              background: view === v ? "#166534" : "#fff",
-              color: view === v ? "#fff" : "#6b7280",
-              fontWeight: 700,
-              fontSize: "0.85rem",
-              cursor: "pointer",
-            }}
-          >
-            {v === "orders" ? "Orders" : "Shopping List"}
-          </button>
-        ))}
+        <button
+          onClick={() => setView("orders")}
+          style={{
+            flex: 1,
+            padding: "10px",
+            border: "none",
+            background: view === "orders" ? "#166534" : "#fff",
+            color: view === "orders" ? "#fff" : "#6b7280",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            cursor: "pointer",
+          }}
+        >
+          Orders
+        </button>
+        <Link
+          href="/manage/purchase-list"
+          style={{
+            flex: 1,
+            padding: "10px",
+            textAlign: "center",
+            border: "none",
+            background: "#fff",
+            color: "#6b7280",
+            fontWeight: 700,
+            fontSize: "0.85rem",
+            textDecoration: "none",
+            display: "inline-block",
+          }}
+        >
+          Shopping List →
+        </Link>
+
       </div>
 
       {orders.length === 0 ? (

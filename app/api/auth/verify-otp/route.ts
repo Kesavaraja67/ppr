@@ -88,14 +88,20 @@ export async function POST(req: NextRequest) {
         target: users.phone_number,
         set: submittedName ? { name: submittedName } : { phone_number: expectedPhone },
       })
-      .returning({ id: users.id });
+      .returning({ id: users.id, created_at: users.created_at });
 
     const userId = upsertedUser?.id;
     if (!userId) {
       return NextResponse.json({ error: "Failed to resolve user" }, { status: 500 });
     }
 
-    // ── 3. Issue customer session cookie ──────────────────────────────────────
+    // Instrumentation: distinguish new sign-up vs returning login for analytics.
+    // TODO(observability): forward isNewUser + userId to Sentry/analytics service.
+    const isNewUser =
+      upsertedUser.created_at !== null &&
+      Date.now() - new Date(upsertedUser.created_at).getTime() < 5_000;
+    console.info(`[otp-verify] ${isNewUser ? "new" : "returning"} user: ${userId}`);
+
     const token = await createCustomerSession(userId);
     const response = NextResponse.json({ success: true, userId });
     response.cookies.set(CUSTOMER_SESSION_COOKIE, token, {

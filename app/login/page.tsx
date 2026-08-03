@@ -3,9 +3,15 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
 import { useMsg91Widget } from "@/hooks/useMsg91Widget";
+
+/** Abort an async operation after this many milliseconds. */
+const OTP_TIMEOUT_MS = 15_000;
+/** Resend cooldown in seconds. */
+const RESEND_COOLDOWN_S = 30;
 
 function LoginForm() {
   const router = useRouter();
@@ -17,13 +23,14 @@ function LoginForm() {
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resendCountdown, setResendCountdown] = useState(0);
 
   const otpInputRef = useRef<HTMLInputElement>(null);
 
   const { ready: widgetReady } = useMsg91Widget("msg91-captcha");
 
 
-  const handleSendOtp = () => {
+  const handleSendOtp = (isResend = false) => {
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
@@ -35,15 +42,25 @@ function LoginForm() {
     }
     setError("");
     setLoading(true);
+
+    // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
+    const timer = setTimeout(() => {
+      setError("OTP request timed out. Please check your connection and try again.");
+      setLoading(false);
+    }, OTP_TIMEOUT_MS);
+
     // @ts-expect-error exposed by the MSG91 widget script
     window.sendOtp(
       `91${cleaned}`,
       () => {
-        setStep("otp");
+        clearTimeout(timer);
+        if (!isResend) setStep("otp");
         setLoading(false);
+        setResendCountdown(RESEND_COOLDOWN_S);
         setTimeout(() => otpInputRef.current?.focus(), 100);
       },
       (err: unknown) => {
+        clearTimeout(timer);
         setError("Failed to send OTP. Please try again.");
         setLoading(false);
         console.error(err);
@@ -63,16 +80,28 @@ function LoginForm() {
     }
     setError("");
     setLoading(true);
+
+    // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
+    const verifyTimer = setTimeout(() => {
+      setError("Verification timed out. Please try again.");
+      setLoading(false);
+    }, OTP_TIMEOUT_MS);
+
     // @ts-expect-error exposed by the MSG91 widget script
     window.verifyOtp(
       code,
       async (data: { message: string }) => {
+        clearTimeout(verifyTimer);
         try {
+          const controller = new AbortController();
+          const fetchTimer = setTimeout(() => controller.abort(), OTP_TIMEOUT_MS);
           const res = await fetch("/api/auth/verify-otp", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ accessToken: data.message }),
+            signal: controller.signal,
           });
+          clearTimeout(fetchTimer);
           const json = await res.json();
           if (!res.ok) {
             setError(json.error ?? "Verification failed. Please check the OTP code.");
@@ -80,12 +109,18 @@ function LoginForm() {
             return;
           }
           router.replace(nextUrl);
-        } catch {
-          setError("Verification failed. Please try again.");
+        } catch (e) {
+          const isAbort = e instanceof Error && e.name === "AbortError";
+          setError(
+            isAbort
+              ? "Request timed out. Please try again."
+              : "Verification failed. Please try again."
+          );
           setLoading(false);
         }
       },
       (err: unknown) => {
+        clearTimeout(verifyTimer);
         setError("Invalid or expired OTP code.");
         setLoading(false);
         console.error(err);
@@ -113,6 +148,13 @@ function LoginForm() {
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  // Resend countdown ticker
+  useEffect(() => {
+    if (resendCountdown <= 0) return;
+    const id = setInterval(() => setResendCountdown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearInterval(id);
+  }, [resendCountdown]);
 
   const cleanedPhone = normalizeIndianMobile(phone);
 
@@ -217,16 +259,13 @@ function LoginForm() {
               boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
             }}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/logo.png?v=6"
+            <Image
+              src="/logo.png"
               alt="P.P.R. Fruits & Vegetables Logo"
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-                display: "block",
-              }}
+              width={72}
+              height={72}
+              priority
+              style={{ objectFit: "cover", display: "block" }}
             />
           </div>
           <p
@@ -383,7 +422,7 @@ function LoginForm() {
             <button
               className="btn-accent"
               style={{ width: "100%", justifyContent: "center" }}
-              onClick={handleSendOtp}
+              onClick={() => handleSendOtp(false)}
               disabled={loading}
             >
               {loading ? "Sending OTP…" : "Send OTP →"}
@@ -399,7 +438,16 @@ function LoginForm() {
                 lineHeight: 1.5,
               }}
             >
-              By continuing, you agree to receive an OTP via SMS.
+              By continuing, you agree to receive an OTP via SMS.{" "}
+              <Link
+                href="/privacy"
+                style={{
+                  color: "var(--emerald, #1A6B47)",
+                  textDecoration: "underline",
+                }}
+              >
+                Privacy policy
+              </Link>
               <br />
               Standard message rates may apply.
             </p>
@@ -483,6 +531,29 @@ function LoginForm() {
               disabled={loading}
             >
               {loading ? "Verifying…" : "Confirm OTP →"}
+            </button>
+
+            <button
+              style={{
+                width: "100%",
+                padding: "13px",
+                background: "none",
+                border: "1.5px solid var(--border)",
+                borderRadius: "var(--radius-pill)",
+                fontSize: "0.88rem",
+                cursor: resendCountdown > 0 || loading ? "default" : "pointer",
+                color: resendCountdown > 0 || loading ? "var(--text-muted)" : "var(--emerald, #1A6B47)",
+                fontFamily: "var(--font)",
+                fontWeight: 500,
+                marginBottom: "12px",
+                transition: "border-color 160ms, color 160ms",
+              }}
+              disabled={resendCountdown > 0 || loading}
+              onClick={() => handleSendOtp(true)}
+            >
+              {resendCountdown > 0
+                ? `Resend OTP in ${resendCountdown}s`
+                : "Resend OTP"}
             </button>
 
             <button

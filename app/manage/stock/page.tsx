@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { orders, vegetables, supplier_requests } from "@/drizzle/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +18,30 @@ function OrdersIcon({ color = "currentColor" }: { color?: string }) {
   );
 }
 
+function CartIcon({ color = "currentColor" }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+    </svg>
+  );
+}
+
 function LeafIcon({ color = "currentColor" }: { color?: string }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.9.9 7.1A5 5 0 0 1 12 20z" />
       <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" />
+    </svg>
+  );
+}
+
+function HistoryIcon({ color = "currentColor" }: { color?: string }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }
@@ -63,10 +82,20 @@ export default async function AdminDashboardPage() {
     .from(orders)
     .where(and(eq(orders.delivery_date, tomorrowStr), eq(orders.status, "pending")));
 
+  const activeTomorrowOrders = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.delivery_date, tomorrowStr), ne(orders.status, "cancelled")));
+
   const vegCount = await db
     .select({ id: vegetables.id })
     .from(vegetables)
     .where(eq(vegetables.in_stock, true));
+
+  const deliveredOrders = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(eq(orders.status, "delivered"));
 
   const unseenSuppliers = await db
     .select({ id: supplier_requests.id })
@@ -83,10 +112,26 @@ export default async function AdminDashboardPage() {
       badge: 0,
     },
     {
+      href: "/manage/purchase-list",
+      icon: CartIcon,
+      label: "Purchase List",
+      sublabel: `Total stock needed for ${activeTomorrowOrders.length} order${activeTomorrowOrders.length !== 1 ? "s" : ""}`,
+      accent: false,
+      badge: 0,
+    },
+    {
       href: "/manage/vegetables",
       icon: LeafIcon,
       label: "Manage Items",
       sublabel: `${vegCount.length} active item${vegCount.length !== 1 ? "s" : ""}`,
+      accent: false,
+      badge: 0,
+    },
+    {
+      href: "/manage/history",
+      icon: HistoryIcon,
+      label: "Order History",
+      sublabel: `${deliveredOrders.length} delivered order${deliveredOrders.length !== 1 ? "s" : ""} • Daily logs`,
       accent: false,
       badge: 0,
     },
@@ -111,7 +156,7 @@ export default async function AdminDashboardPage() {
   ];
 
   return (
-    <div style={{ padding: "20px 16px" }}>
+    <div style={{ padding: "20px 16px", maxWidth: "600px", margin: "0 auto" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px" }}>
         <div>
           <h1 style={{ fontSize: "1.3rem", fontWeight: 700 }}>PPR Admin</h1>
@@ -161,6 +206,7 @@ export default async function AdminDashboardPage() {
                 border: tile.accent ? "none" : "1.5px solid #e5e7eb",
                 textDecoration: "none",
                 position: "relative",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
               }}
             >
               <div

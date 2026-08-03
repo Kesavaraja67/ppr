@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { vegetables } from "@/drizzle/schema";
 import { eq, asc } from "drizzle-orm";
 import { headers } from "next/headers";
+import { revalidatePath } from "next/cache";
 import { lookupTamilName } from "@/lib/tamil-dict";
 
 // GET /api/admin/vegetables — list all vegetables for master list management
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
     })
     .returning();
 
+  revalidatePath("/");
   return NextResponse.json({ vegetable: newVeg }, { status: 201 });
 }
 
@@ -139,6 +141,7 @@ export async function PATCH(req: NextRequest) {
     .where(eq(vegetables.id, body.id))
     .limit(1);
 
+  revalidatePath("/");
   return NextResponse.json({ vegetable: updated });
 }
 
@@ -168,5 +171,6 @@ export async function DELETE(req: NextRequest) {
     .set({ in_stock: false, updated_at: new Date(), updated_by: adminId })
     .where(eq(vegetables.id, body.id));
 
+  revalidatePath("/");
   return NextResponse.json({ success: true });
 }

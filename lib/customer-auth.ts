@@ -5,7 +5,18 @@ export const CUSTOMER_SESSION_COOKIE = "ppr_customer_session";
 const SESSION_DURATION_DAYS = 75; // 60-90 day range per spec
 
 function getJwtSecret(): Uint8Array {
-  const secret = process.env.CUSTOMER_JWT_SECRET || "fallback-customer-secret-key-for-build-environment";
+  const secret = process.env.CUSTOMER_JWT_SECRET;
+  if (!secret) {
+    // Allow Next.js static-build phase to proceed without secrets.
+    // In real runtime (dev or prod) a missing secret is a hard misconfiguration.
+    if (process.env.NEXT_PHASE === "phase-production-build") {
+      return new TextEncoder().encode("__build_phase_placeholder__");
+    }
+    throw new Error(
+      "CUSTOMER_JWT_SECRET environment variable is not set. " +
+      "Add it to .env.local (dev) or Vercel environment variables (prod)."
+    );
+  }
   return new TextEncoder().encode(secret);
 }
 
@@ -32,6 +43,27 @@ export async function verifyCustomerSession(
   } catch {
     return null;
   }
+}
+
+/**
+ * Like verifyCustomerSession but also returns the token's expiry time.
+ * Used by the middleware to decide whether to slide the session window.
+ */
+export async function verifyCustomerSessionWithExp(
+  token: string
+): Promise<{ userId: string; exp: number } | null> {
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecret());
+    if (!payload.sub || payload.type !== "customer" || !payload.exp) return null;
+    return { userId: payload.sub, exp: payload.exp };
+  } catch {
+    return null;
+  }
+}
+
+/** Mint a fresh 75-day token for the given userId (sliding window renewal). */
+export async function renewCustomerSession(userId: string): Promise<string> {
+  return createCustomerSession(userId);
 }
 
 export async function getCustomerSession(): Promise<{ userId: string } | null> {

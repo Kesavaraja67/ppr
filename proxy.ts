@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifySession, SESSION_COOKIE } from "@/lib/auth";
-import { verifyCustomerSession, CUSTOMER_SESSION_COOKIE } from "@/lib/customer-auth";
+import {
+  verifyCustomerSessionWithExp,
+  renewCustomerSession,
+  CUSTOMER_SESSION_COOKIE,
+} from "@/lib/customer-auth";
+
+/** Slide the window when fewer than this many days remain on the session. */
+const SESSION_RENEWAL_THRESHOLD_DAYS = 37.5;
+
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -57,7 +65,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    const session = await verifyCustomerSession(token);
+    const session = await verifyCustomerSessionWithExp(token);
     if (!session) {
       if (pathname.startsWith("/api/")) {
         const response = NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -74,7 +82,25 @@ export async function proxy(request: NextRequest) {
     // Inject customer ID for downstream API routes
     const requestHeaders = new Headers(request.headers);
     requestHeaders.set("x-customer-id", session.userId);
-    return NextResponse.next({ request: { headers: requestHeaders } });
+    const customerResponse = NextResponse.next({ request: { headers: requestHeaders } });
+
+    // Sliding-window renewal: if fewer than SESSION_RENEWAL_THRESHOLD_DAYS remain,
+    // transparently mint a fresh 75-day token and set it on the response.
+    const nowSec = Math.floor(Date.now() / 1000);
+    const remainingDays = (session.exp - nowSec) / 86_400;
+    if (remainingDays < SESSION_RENEWAL_THRESHOLD_DAYS) {
+      const newToken = await renewCustomerSession(session.userId);
+      const SESSION_DURATION_DAYS = 75;
+      customerResponse.cookies.set(CUSTOMER_SESSION_COOKIE, newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: SESSION_DURATION_DAYS * 24 * 60 * 60,
+        path: "/",
+      });
+    }
+
+    return customerResponse;
   }
 
   return NextResponse.next();

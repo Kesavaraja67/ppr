@@ -46,8 +46,17 @@ interface RateLimitEntry {
 const phoneRateMap = new Map<string, RateLimitEntry>();
 const ipRateMap = new Map<string, RateLimitEntry>();
 
+/** Sweep expired entries from a rate-limit map to bound memory growth. */
+function evictExpired(map: Map<string, RateLimitEntry>): void {
+  const now = Date.now();
+  for (const [key, entry] of map) {
+    if (now - entry.windowStart > WINDOW_MS) map.delete(key);
+  }
+}
+
 function checkAndRecord(map: Map<string, RateLimitEntry>, key: string): boolean {
   const now = Date.now();
+  evictExpired(map);
   const entry = map.get(key);
 
   if (!entry || now - entry.windowStart > WINDOW_MS) {

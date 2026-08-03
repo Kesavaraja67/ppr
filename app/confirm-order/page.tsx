@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
+import { useMsg91Widget } from "@/hooks/useMsg91Widget";
 
 interface SavedAddress {
   id: string;
@@ -74,28 +75,8 @@ export default function ConfirmOrderPage() {
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
 
-  // Load MSG91 OTP Widget with exposed methods for the onboarding modal
-  useEffect(() => {
-    const configuration = {
-      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
-      tokenAuth: process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH,
-      exposeMethods: true,
-      captchaRenderId: "msg91-captcha-order",
-      success: () => {},
-      failure: (err: unknown) => console.error("MSG91 widget error:", err),
-    };
-    const script = document.createElement("script");
-    script.src = "https://verify.msg91.com/otp-provider.js";
-    script.async = true;
-    script.onload = () => {
-      // @ts-expect-error global exposed by the MSG91 otp-provider script
-      window.initSendOTP(configuration);
-    };
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
+  const { ready: widgetReady } = useMsg91Widget("msg91-captcha-order");
+
 
   // Modal Escape key & focus handling
   useEffect(() => {
@@ -337,6 +318,10 @@ export default function ConfirmOrderPage() {
       setOtpError("Enter a valid 10-digit mobile number");
       return;
     }
+    if (!widgetReady) {
+      setOtpError("OTP service is still loading. Please wait a moment and try again.");
+      return;
+    }
     setOtpError("");
     setOtpLoading(true);
     // @ts-expect-error exposed by the MSG91 widget script
@@ -358,6 +343,10 @@ export default function ConfirmOrderPage() {
   const handleVerifyOtp = () => {
     if (!onboardOtp || onboardOtp.length < 4) {
       setOtpError("Enter the OTP code sent to your mobile");
+      return;
+    }
+    if (!widgetReady) {
+      setOtpError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
     setOtpError("");

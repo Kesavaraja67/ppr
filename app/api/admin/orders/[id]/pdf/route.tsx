@@ -115,6 +115,7 @@ const styles = StyleSheet.create({
 
 interface BillPDFProps {
   shopName: string;
+  shopPhone: string;
   order: {
     id: string;
     delivery_date: string;
@@ -135,7 +136,7 @@ interface BillPDFProps {
   }>;
 }
 
-function BillPDFDocument({ shopName, order, items }: BillPDFProps) {
+function BillPDFDocument({ shopName, shopPhone, order, items }: BillPDFProps) {
   const pricedItems = items.filter((i) => i.price_per_unit !== null);
   const subtotal = Number(order.subtotal ?? 0).toFixed(2);
   const isFreeDelivery = Number(order.delivery_charge ?? 0) === 0;
@@ -207,7 +208,7 @@ function BillPDFDocument({ shopName, order, items }: BillPDFProps) {
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerBold}>Payment: CASH ON DELIVERY</Text>
-          <Text style={styles.footerText}>Call / WhatsApp: 94437 21544</Text>
+          <Text style={styles.footerText}>Call / WhatsApp: {shopPhone}</Text>
           <Text style={styles.footerText}>Thank you for shopping with us!</Text>
         </View>
       </Page>
@@ -242,6 +243,15 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
+    // Reject orders that have not been priced yet — PDF would show ₹0 totals.
+    const finalizedStatuses = ["priced", "dispatched", "delivered", "completed"];
+    if (!finalizedStatuses.includes(order.status)) {
+      return NextResponse.json(
+        { error: "Bill PDF is only available for priced orders" },
+        { status: 400 }
+      );
+    }
+
     const items = await db
       .select({
         id: order_items.id,
@@ -258,9 +268,10 @@ export async function GET(
 
     const [config] = await db.select().from(shop_config).limit(1);
     const shopName = config?.shop_name ?? "P.P.R. Fruits and Vegetables";
+    const shopPhone = config?.phone_number ?? "94437 21544";
 
     const pdfBuffer = await renderToBuffer(
-      <BillPDFDocument shopName={shopName} order={order} items={items} />
+      <BillPDFDocument shopName={shopName} shopPhone={shopPhone} order={order} items={items} />
     );
 
     const isDownload = req.nextUrl.searchParams.get("download") === "true";
@@ -271,7 +282,8 @@ export async function GET(
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `${isDownload ? "attachment" : "inline"}; filename="${filename}"`,
-        "Cache-Control": "public, max-age=60",
+        // Private — bill contains customer name & phone; must not be stored in shared caches.
+        "Cache-Control": "private, no-store",
       },
     });
   } catch (error) {

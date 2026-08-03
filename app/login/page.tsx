@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
+import { useMsg91Widget } from "@/hooks/useMsg91Widget";
 
 function LoginForm() {
   const router = useRouter();
@@ -19,34 +20,17 @@ function LoginForm() {
 
   const otpInputRef = useRef<HTMLInputElement>(null);
 
-  // Load MSG91 OTP Widget script with exposed methods so we can call
-  // window.sendOtp / window.verifyOtp directly from our own UI.
-  useEffect(() => {
-    const configuration = {
-      widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
-      tokenAuth: process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH,
-      exposeMethods: true,
-      captchaRenderId: "msg91-captcha",
-      success: () => {},
-      failure: (err: unknown) => console.error("MSG91 widget error:", err),
-    };
-    const script = document.createElement("script");
-    script.src = "https://verify.msg91.com/otp-provider.js";
-    script.async = true;
-    script.onload = () => {
-      // @ts-expect-error global exposed by the MSG91 otp-provider script
-      window.initSendOTP(configuration);
-    };
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
-  }, []);
+  const { ready: widgetReady } = useMsg91Widget("msg91-captcha");
+
 
   const handleSendOtp = () => {
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
+      return;
+    }
+    if (!widgetReady) {
+      setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
     setError("");
@@ -71,6 +55,10 @@ function LoginForm() {
     const code = otpCode ?? otp;
     if (!code || code.length < 4) {
       setError("Enter the OTP sent to your phone");
+      return;
+    }
+    if (!widgetReady) {
+      setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
     setError("");

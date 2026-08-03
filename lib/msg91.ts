@@ -13,6 +13,9 @@
 
 const MSG91_AUTH_KEY = process.env.MSG91_AUTH_KEY || "";
 
+/** Timeout (ms) for the MSG91 verifyAccessToken network call. */
+const VERIFY_TIMEOUT_MS = 8_000;
+
 export async function verifyMsg91AccessToken(
   accessToken: string
 ): Promise<{ success: true; phone: string } | { success: false; error: string }> {
@@ -21,6 +24,10 @@ export async function verifyMsg91AccessToken(
     return { success: false, error: "Server misconfiguration. Please try again later." };
   }
 
+  // Abort the upstream call if MSG91 stalls.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), VERIFY_TIMEOUT_MS);
+
   try {
     const response = await fetch(
       "https://control.msg91.com/api/v5/widget/verifyAccessToken",
@@ -28,14 +35,18 @@ export async function verifyMsg91AccessToken(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authkey: MSG91_AUTH_KEY, "access-token": accessToken }),
+        signal: controller.signal,
       }
     );
+    clearTimeout(timer);
+
     const data = await response.json();
 
-    // Response shape: try documented field first, then plausible alternates.
-    // If none match, log the raw payload so the correct field is immediately
-    // visible in server logs on the first real test — fail loudly, not silently.
-    const isSuccess = data.type === "success" || response.ok === true;
+    // Require BOTH a 2xx status AND data.type === "success".
+    // The OR condition previously allowed HTTP-200 error payloads to pass —
+    // data.message could then be mistaken for a phone number.
+    const isSuccess = response.ok && data?.type === "success";
+
     const phoneCandidate =
       data.message ?? data.data?.mobile ?? data.mobile ?? data.identifier;
 
@@ -44,9 +55,10 @@ export async function verifyMsg91AccessToken(
     }
 
     if (isSuccess && !phoneCandidate) {
+      // Log response type only — never the full payload which may contain PII.
       console.error(
-        "MSG91 verifyAccessToken: success but no recognizable phone field. Raw response:",
-        JSON.stringify(data)
+        "MSG91 verifyAccessToken: success but no recognizable phone field. " +
+        `Response type: ${data?.type ?? "unknown"}`
       );
       return {
         success: false,
@@ -56,6 +68,12 @@ export async function verifyMsg91AccessToken(
 
     return { success: false, error: data.message || "Invalid or expired OTP session" };
   } catch (error) {
+    clearTimeout(timer);
+    const isAbort = error instanceof Error && error.name === "AbortError";
+    if (isAbort) {
+      console.error("MSG91 verifyAccessToken: request timed out after", VERIFY_TIMEOUT_MS, "ms");
+      return { success: false, error: "OTP verification timed out. Please try again." };
+    }
     console.error("MSG91 verifyAccessToken error:", error);
     return { success: false, error: "Network error verifying OTP session" };
   }

@@ -89,6 +89,9 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
           if (item.price_per_unit) existing[item.id] = item.price_per_unit;
         }
         setPrices(existing);
+        // Show PDF actions immediately if the order is already finalized
+        const finalizedStatuses = ["priced", "dispatched", "delivered", "completed"];
+        if (finalizedStatuses.includes(d.order?.status)) setSaved(true);
       });
 
     fetch("/api/admin/settings")
@@ -180,6 +183,15 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     try {
       const textBill = generateTextBill(order, items, shopName);
       const pdfRes = await fetch(`/api/admin/orders/${order.id}/pdf`);
+      // Validate response before treating the body as a PDF
+      const contentType = pdfRes.headers.get("content-type") ?? "";
+      if (!pdfRes.ok || !contentType.includes("application/pdf")) {
+        // Fall back to text-only share — still useful via WhatsApp
+        console.warn("PDF unavailable, falling back to text share");
+        const waText = encodeURIComponent(textBill);
+        window.open(`https://api.whatsapp.com/send?text=${waText}`, "_blank");
+        return;
+      }
       const pdfBlob = await pdfRes.blob();
       const file = new File([pdfBlob], `P.P.R.-Bill-${order.delivery_date}.pdf`, {
         type: "application/pdf",

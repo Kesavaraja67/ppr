@@ -108,7 +108,8 @@ export default function ManageLoginPage() {
               className="admin-input"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="8870187248"
+              placeholder="Phone number"
+
               autoComplete="username"
               required
               disabled={locked}

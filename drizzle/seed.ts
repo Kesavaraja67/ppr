@@ -28,25 +28,37 @@ const INITIAL_PIN = "1987"; // ← CHANGE THIS AFTER FIRST LOGIN
 async function main() {
   console.log("⏳ Seeding database…");
 
-  // ─── 1. Admin ───────────────────────────────────────────────────────────────
-  const existingAdmin = await db
-    .select({ id: schema.admins.id })
-    .from(schema.admins)
-    .where(eq(schema.admins.phone, "8870187248"))
-    .limit(1);
+  // ─── 1. Admins ───────────────────────────────────────────────────────────────
+  const adminCredentials = [
+    { phone: "8870187248", pin: "1987", name: "Jayaraman P", role: "owner" },
+    { phone: "8825952966", pin: "1996", name: "Admin 2", role: "owner" },
+  ];
 
-  if (existingAdmin.length === 0) {
-    const pin_hash = await bcrypt.hash(INITIAL_PIN, 12);
-    await db.insert(schema.admins).values({
-      name: "Jayaraman P",
-      phone: "8870187248",
-      pin_hash,
-      role: "owner",
-    });
-    console.log("✅ Admin created — check seed script comments for the initial PIN. CHANGE IT NOW.");
-  } else {
-    console.log("ℹ️  Admin already exists — skipped");
+  for (const cred of adminCredentials) {
+    const pin_hash = await bcrypt.hash(cred.pin, 12);
+    const existing = await db
+      .select({ id: schema.admins.id })
+      .from(schema.admins)
+      .where(eq(schema.admins.phone, cred.phone))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(schema.admins).values({
+        name: cred.name,
+        phone: cred.phone,
+        pin_hash,
+        role: cred.role,
+      });
+      console.log(`✅ Admin ${cred.phone} created.`);
+    } else {
+      await db
+        .update(schema.admins)
+        .set({ pin_hash, name: cred.name, role: cred.role })
+        .where(eq(schema.admins.phone, cred.phone));
+      console.log(`✅ Admin ${cred.phone} PIN updated.`);
+    }
   }
+
 
   // ─── 2. Shop config ─────────────────────────────────────────────────────────
   const existingConfig = await db
@@ -110,7 +122,7 @@ async function main() {
     console.log(`✅ ${starterVegs.length} starter vegetables seeded`);
   } else {
     console.log("ℹ️  Vegetables already exist — running idempotent name and metadata backfill");
-    
+
     const renames = [
       { oldName: "Tomato", newName: "Country Tomato", name_ta: "நாட்டு தக்காளி", image_url: "/curated/country_tomato.jpg" },
       { oldName: "Onion", newName: "Big Onion", name_ta: "பெரிய வெங்காயம்", image_url: "/curated/big_onion.jpg" },

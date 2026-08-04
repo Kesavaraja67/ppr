@@ -31,7 +31,7 @@ async function main() {
   // ─── 1. Admins ───────────────────────────────────────────────────────────────
   const adminCredentials = [
     { phone: "8870187248", pin: "1987", name: "Jayaraman P", role: "owner" },
-    { phone: "8825952966", pin: "1996", name: "Admin 2", role: "owner" },
+    { phone: "8825952966", pin: "1996", name: "Kala ", role: "owner" },
   ];
 
   for (const cred of adminCredentials) {

@@ -322,137 +322,153 @@ This document lists the **73 produce items** added to the PPR Fruits & Vegetable
 ### 51. Lemon
 - **Tamil**: லெமன்
 - **Filename**: `public/curated/lemon.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh bright yellow lemon, isolated on clean white background, food photography`
+
 
 ### 52. Raw Mango
 - **Tamil**: மாங்காய்
 - **Filename**: `public/curated/raw_mango.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green raw mango, isolated on white background, food photography`
+
 
 ### 53. Round Raw Mango
 - **Tamil**: உருட்டு மாங்காய்
 - **Filename**: `public/curated/round_raw_mango.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh round green raw mango uruttu maangai, isolated on white background, food photography`
+
 
 ### 54. Amla
 - **Tamil**: நெல்லிக்காய்
 - **Filename**: `public/curated/amla.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh Indian gooseberry amla nellikai, isolated on clean white background, food photography`
+
 
 ### 55. Watermelon
 - **Tamil**: தர்பூசணி
 - **Filename**: `public/curated/watermelon.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh red watermelon wedge slice, isolated on white background, food photography`
+
 
 ### 56. Papaya
 - **Tamil**: பப்பாளி பழம்
 - **Filename**: `public/curated/papaya.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh ripe orange papaya, isolated on clean white background, food photography`
+
 
 ### 57. Custard Apple
 - **Tamil**: சீதாப்பழம்
 - **Filename**: `public/curated/custard_apple.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green knobby custard apple seethaphal, isolated on white background, food photography`
+
 
 ### 58. Guava
 - **Tamil**: கொய்யாப்பழம்
 - **Filename**: `public/curated/guava.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green guava fruit, isolated on white background, food photography`
+
 
 ### 59. Muskmelon
 - **Tamil**: முலாம்பழம்
 - **Filename**: `public/curated/muskmelon.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh orange muskmelon cantaloupe, isolated on white background, food photography`
+
 
 ### 60. Plums
 - **Tamil**: ப்ளம்ஸ்
 - **Filename**: `public/curated/plums.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh ripe dark red plums, isolated on white background, food photography`
+
 
 ### 61. Pear
 - **Tamil**: பேரிக்காய்
 - **Filename**: `public/curated/pear.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh green and yellow pear fruit, isolated on clean white background, food photography`
+
 
 ### 62. Red Dragon Fruit
 - **Tamil**: ரெட் டிராகன் ஃப்ரூட்
 - **Filename**: `public/curated/red_dragon_fruit.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh red dragon fruit, whole and sliced open showing red purple flesh with black seeds, isolated on white background, food photography`
+
 
 ### 63. Pomegranate
 - **Tamil**: மாதுளை பழம்
 - **Filename**: `public/curated/pomegranate.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Generated & Linked
 - **Prompt**: `Studio product photo of fresh red pomegranate fruit, isolated on white background, food photography`
+
 
 ### 64. Pineapple
 - **Tamil**: அண்ணாச்சி பழம்
 - **Filename**: `public/curated/pineapple.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh pineapple with spiky leaves, isolated on white background, food photography`
 
 ### 65. Kamala Orange
 - **Tamil**: கமலா ஆரஞ்ச்
 - **Filename**: `public/curated/kamala_orange.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh Indian Kamala orange mandarin, isolated on white background, food photography`
 
 ### 66. Mandarin Orange
 - **Tamil**: மாண்டரின் ஆரஞ்ச்
 - **Filename**: `public/curated/mandarin_orange.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh mandarin orange fruit, isolated on white background, food photography`
 
 ### 67. Citrus Orange
 - **Tamil**: சிட்ரஸ் ஆரஞ்ச்
 - **Filename**: `public/curated/citrus_orange.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh sweet citrus orange fruit, isolated on white background, food photography`
+
 
 ### 68. White Dates
 - **Tamil**: ஒயிட் டேட்ஸ்
 - **Filename**: `public/curated/white_dates.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh white amber dates, isolated on white background, food photography`
 
 ### 69. Red Dates
 - **Tamil**: ரெட் டேட்ஸ்
 - **Filename**: `public/curated/red_dates.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh red dates fruit, isolated on white background, food photography`
 
 ### 70. Rambutan
 - **Tamil**: ரம்புடான்
 - **Filename**: `public/curated/rambutan.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh red hairy rambutan fruit, isolated on white background, food photography`
 
 ### 71. Kambam Grapes
 - **Tamil**: கம்பம் திராட்சை
 - **Filename**: `public/curated/kambam_grapes.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh dark purple Kambam black grapes cluster, isolated on white background, food photography`
 
 ### 72. Sweet Lime
 - **Tamil**: சாத்துக்குடி
 - **Filename**: `public/curated/sweet_lime.jpg`
-- **Status**: ⏳ Pending Generation
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh sweet lime mosambi sathukudi, isolated on white background, food photography`
+
 
 ### 73. Kiwi
 - **Tamil**: கீவி
 - **Filename**: `public/curated/kiwi.jpg`
-- **Status**: ✅ Generated & Linked
+- **Status**: ✅ Image Uploaded & Linked
 - **Prompt**: `Studio product photo of fresh kiwi fruit, whole and sliced half, isolated on clean white background, high quality photography, food styling`
+

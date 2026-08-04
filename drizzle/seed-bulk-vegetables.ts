@@ -135,24 +135,25 @@ async function main() {
       imageUrl = `/curated/${slug}.png`;
     }
 
-    const inserted = await db
-      .insert(schema.vegetables)
-      .values({
-        name_en:          item.name_en,
-        name_ta:          item.name_ta,
-        unit:             item.unit,
-        category:         item.category,
-        current_price:    "0",   // Admin sets price via stock management panel
-        image_url:        item.image_url ?? imageUrl,
-        is_curated_image: item.is_curated_image ?? !!imageUrl,
-        in_stock:         true,
-      })
-      .onConflictDoNothing({ target: schema.vegetables.name_en })
-      .returning({ id: schema.vegetables.id });
+    const [existing] = await db
+      .select({ id: schema.vegetables.id })
+      .from(schema.vegetables)
+      .where(eq(schema.vegetables.name_en, item.name_en))
+      .limit(1);
 
     const finalImageUrl = item.image_url ?? imageUrl;
 
-    if (inserted.length > 0) {
+    if (!existing) {
+      await db.insert(schema.vegetables).values({
+        name_en: item.name_en,
+        name_ta: item.name_ta,
+        unit: item.unit,
+        category: item.category,
+        current_price: "0",
+        image_url: finalImageUrl,
+        is_curated_image: item.is_curated_image ?? !!finalImageUrl,
+        in_stock: true,
+      });
       console.log(`  ✅ Added "${item.name_en}" (${item.name_ta})`);
       added++;
     } else {
@@ -160,7 +161,7 @@ async function main() {
         await db
           .update(schema.vegetables)
           .set({ image_url: finalImageUrl, is_curated_image: true })
-          .where(eq(schema.vegetables.name_en, item.name_en));
+          .where(eq(schema.vegetables.id, existing.id));
         console.log(`  🖼  Updated image for "${item.name_en}" → ${finalImageUrl}`);
       } else {
         console.log(`  ⏭  Skipping "${item.name_en}" — already exists`);
@@ -168,6 +169,7 @@ async function main() {
       skipped++;
     }
   }
+
 
   console.log(`\n✅ Done — ${added} added, ${skipped} skipped (already existed)`);
   console.log(`ℹ️  All new items have low-storage compressed product photos linked under /curated/`);

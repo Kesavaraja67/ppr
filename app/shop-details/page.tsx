@@ -174,7 +174,7 @@ export default function ShopDetailsPage() {
           <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.85rem", color: "#374151" }}>
             <li style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f3f4f6", paddingBottom: "6px" }}>
               <span style={{ color: "#6b7280" }}>Ordering Hours:</span>
-              <span style={{ fontWeight: 600 }}>24 / 7 online catalog</span>
+              <span style={{ fontWeight: 600 }}> 12 hrs online catalog</span>
             </li>
             <li style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #f3f4f6", paddingBottom: "6px" }}>
               <span style={{ color: "#6b7280" }}>Daily Order Cutoff:</span>

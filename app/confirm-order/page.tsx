@@ -78,6 +78,7 @@ export default function ConfirmOrderPage() {
 
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
+  const isVerifyingRef = useRef(false);
 
   const { ready: widgetReady } = useMsg91Ready();
 
@@ -346,6 +347,7 @@ export default function ConfirmOrderPage() {
   };
 
   const handleVerifyOtp = () => {
+    if (otpLoading || isVerifyingRef.current) return;
     if (!onboardOtp || onboardOtp.length < 4) {
       setOtpError("Enter the OTP code sent to your mobile");
       return;
@@ -357,10 +359,12 @@ export default function ConfirmOrderPage() {
     }
     setOtpError("");
     setOtpLoading(true);
+    isVerifyingRef.current = true;
 
     let timedOut = false;
     const verifyTimer = setTimeout(() => {
       timedOut = true;
+      isVerifyingRef.current = false;
       setOtpError("Verification timed out. Please try again.");
       setOtpLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -384,15 +388,18 @@ export default function ConfirmOrderPage() {
           if (timedOut) return;
           const json = await res.json();
           if (!res.ok) {
+            isVerifyingRef.current = false;
             setOtpError(json.error ?? "Verification failed. Please check the OTP code.");
             setOtpLoading(false);
             return;
           }
+          isVerifyingRef.current = false;
           setLoggedIn(true);
           setShowOnboarding(false);
           await executeOrderSubmission();
         } catch (e) {
           if (timedOut) return;
+          isVerifyingRef.current = false;
           const isAbort = e instanceof Error && e.name === "AbortError";
           setOtpError(
             isAbort
@@ -405,6 +412,7 @@ export default function ConfirmOrderPage() {
       (err: unknown) => {
         if (timedOut) return;
         clearTimeout(verifyTimer);
+        isVerifyingRef.current = false;
         setOtpError("Invalid or expired OTP code.");
         setOtpLoading(false);
         console.error(err);

@@ -308,7 +308,10 @@ function KgInputBar({
 
   if (prevQty !== qty) {
     setPrevQty(qty);
-    setInputValue(qty > 0 ? String(qty) : "1");
+    const parsedInput = parseFloat(inputValue);
+    if (isNaN(parsedInput) || parsedInput !== qty) {
+      setInputValue(qty > 0 ? String(qty) : "1");
+    }
   }
 
   return (
@@ -356,7 +359,7 @@ function KgInputBar({
             setInputValue(e.target.value);
             const val = parseFloat(e.target.value);
             if (!isNaN(val) && val >= 0.1) {
-              onQuantityChange(parseFloat(val.toFixed(1)));
+              onQuantityChange(val);
             }
           }}
           onBlur={() => {
@@ -479,7 +482,7 @@ function OrderListIcon({ count }: { count: number }) {
             fontFamily: "var(--font)",
           }}
         >
-          {count > 99 ? "99+" : count}
+          {displayCount > 99 ? "99+" : displayCount}
         </span>
       )}
     </button>
@@ -503,12 +506,13 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
 
   const handleAddToCartClick = () => {
     if (!shopOpen) return;
-    // Ask for unit selection on ALL produce items (vegetables & fruits, including Banana)
-    if (veg.category !== "grocery") {
+    // Ask for unit selection on produce items that support dual-mode (allow_piece_mode === true)
+    if (veg.category !== "grocery" && veg.allow_piece_mode) {
       setShowChoice(true);
     } else {
-      // Grocery items (milk, curd, powder, etc.) add 1 piece directly
-      setQty(veg.id, 1, {
+      // Direct add according to veg.unit (0.1 kg for weight items, 1 for piece/grocery)
+      const initialQty = veg.unit === "kg" ? 0.1 : 1;
+      setQty(veg.id, initialQty, {
         name_en: veg.name_en,
         name_ta: veg.name_ta,
         unit: veg.unit,
@@ -518,6 +522,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
   };
 
   const handleSelectUnit = (selectedUnit: "kg" | "piece") => {
+    if (selectedUnit === "piece" && !veg.allow_piece_mode) return;
     setShowChoice(false);
     const initialQty = selectedUnit === "kg" ? 0.1 : 1;
     setQty(veg.id, initialQty, {
@@ -701,18 +706,36 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
         {veg.in_stock ? (
           qty === 0 ? (
             showChoice ? (
-              /* Inline Unit Choice Selector when Add to Cart is clicked */
+              /* Inline Unit Choice Selector with Cancel button & Tamil labels */
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <span
-                  style={{
-                    fontSize: "0.68rem",
-                    fontWeight: 700,
-                    color: "#374151",
-                    textAlign: "center",
-                  }}
-                >
-                  Select Unit:
-                </span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span
+                    style={{
+                      fontSize: "0.68rem",
+                      fontWeight: 700,
+                      color: "#374151",
+                    }}
+                  >
+                    Select Unit / அளவு தேர்வு:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowChoice(false)}
+                    aria-label="Cancel unit selection"
+                    style={{
+                      border: "none",
+                      background: "none",
+                      color: "#9CA3AF",
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      padding: "0 4px",
+                      lineHeight: 1,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
                 <div style={{ display: "flex", gap: "6px" }}>
                   <button
                     type="button"
@@ -724,30 +747,32 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
                       color: "#fff",
                       border: "none",
                       borderRadius: "9999px",
-                      fontSize: "0.72rem",
+                      fontSize: "0.7rem",
                       fontWeight: 700,
                       cursor: "pointer",
                     }}
                   >
-                    By Weight
+                    By Weight / எடை
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectUnit("piece")}
-                    style={{
-                      flex: 1,
-                      height: "36px",
-                      background: "#F3F4F6",
-                      color: "#1F2937",
-                      border: "1px solid #D1D5DB",
-                      borderRadius: "9999px",
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    By Piece
-                  </button>
+                  {veg.allow_piece_mode && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectUnit("piece")}
+                      style={{
+                        flex: 1,
+                        height: "36px",
+                        background: "#F3F4F6",
+                        color: "#1F2937",
+                        border: "1px solid #D1D5DB",
+                        borderRadius: "9999px",
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      By Piece / எண்ணிக்கை
+                    </button>
+                  )}
                 </div>
               </div>
             ) : (

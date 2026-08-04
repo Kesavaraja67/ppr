@@ -17,7 +17,7 @@ export interface DeliveryConfig {
 }
 
 export interface OrderLineCategorized {
-  category: "vegetable" | "fruit" | "grocery" | string;
+  category: "vegetable" | "fruit" | "grocery" | (string & {});
   line_total: number;
 }
 
@@ -43,18 +43,23 @@ export function computeDeliveryCharge(
     .filter((l) => l.category === "fruit")
     .reduce((sum, l) => sum + l.line_total, 0);
 
+  const grocery_total = lines
+    .filter((l) => l.category === "grocery")
+    .reduce((sum, l) => sum + l.line_total, 0);
+
   const subtotal = lines.reduce((sum, l) => sum + l.line_total, 0);
 
   const has_vegetables = vegetable_total > 0;
   const has_fruits = fruit_total > 0;
+  const has_groceries = grocery_total > 0;
 
   let threshold: number;
   let relevant_total: number;
 
-  if (!has_vegetables && !has_fruits) {
+  if (subtotal === 0) {
     threshold = 0;
     relevant_total = 0;
-  } else if (has_vegetables && has_fruits) {
+  } else if (has_groceries || (has_vegetables && has_fruits)) {
     threshold = config.free_delivery_mixed_threshold;
     relevant_total = subtotal;
   } else if (has_vegetables) {

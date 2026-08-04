@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Verify all vegetable IDs exist and check unit / mode permissions
+  // Verify all vegetable IDs exist, are in stock, and check unit / mode permissions
   const vegIds = body.items.map((i) => i.veg_id);
   const foundVegs = await db
     .select({
@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
       name_en: vegetables.name_en,
     })
     .from(vegetables)
-    .where(inArray(vegetables.id, vegIds));
+    .where(and(inArray(vegetables.id, vegIds), eq(vegetables.in_stock, true)));
 
   const vegMap = new Map(foundVegs.map((v) => [v.id, v]));
 
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
     const dbVeg = vegMap.get(item.veg_id);
     if (!dbVeg) {
       return NextResponse.json(
-        { error: `Item not found: ${item.veg_id}` },
+        { error: `Item not found or out of stock: ${item.veg_id}` },
         { status: 400 }
       );
     }
@@ -97,11 +97,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Minimum quantity validation: kg items require min 0.1 (100g), other units require min 1
+    // Quantity validation: finite numeric value within [minQty, 1000]
     const minQty = item.unit === "kg" ? 0.1 : 1;
-    if (item.qty < minQty) {
+    const maxQty = 1000;
+    if (
+      typeof item.qty !== "number" ||
+      !Number.isFinite(item.qty) ||
+      item.qty < minQty ||
+      item.qty > maxQty
+    ) {
       return NextResponse.json(
-        { error: `Minimum quantity is ${minQty} ${item.unit} per item` },
+        { error: `Invalid quantity for item ${item.veg_id}. Must be between ${minQty} and ${maxQty} ${item.unit}` },
         { status: 400 }
       );
     }

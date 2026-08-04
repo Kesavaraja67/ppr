@@ -1,6 +1,7 @@
 /**
  * migrate-update-allow-piece-mode-default.ts
- * Updates all existing vegetable/fruit kg rows to allow_piece_mode = true
+ * NOTE: drizzle/migrate-add-allow-piece-mode.ts MUST be run first to create allow_piece_mode column (default false).
+ * This script then updates all existing vegetable/fruit kg rows to allow_piece_mode = true
  * and sets default of allow_piece_mode column to true in production DB.
  * Run with: npx tsx drizzle/migrate-update-allow-piece-mode-default.ts
  */
@@ -8,13 +9,17 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { Pool } from "@neondatabase/serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
-import { neonConfig } from "@neondatabase/serverless";
 
 neonConfig.webSocketConstructor = ws;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL environment variable is missing.");
+  process.exit(1);
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function run() {
   const client = await pool.connect();

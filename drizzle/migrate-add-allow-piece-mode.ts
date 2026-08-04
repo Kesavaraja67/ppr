@@ -7,13 +7,17 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 
-import { Pool } from "@neondatabase/serverless";
+import { Pool, neonConfig } from "@neondatabase/serverless";
 import ws from "ws";
-import { neonConfig } from "@neondatabase/serverless";
 
 neonConfig.webSocketConstructor = ws;
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL! });
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL environment variable is missing.");
+  process.exit(1);
+}
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function run() {
   const client = await pool.connect();

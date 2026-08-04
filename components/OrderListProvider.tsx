@@ -28,21 +28,29 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<OrderItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load from sessionStorage after initial mount to eliminate SSR hydration mismatch
+  // Load from sessionStorage on mount to eliminate SSR hydration mismatch
   useEffect(() => {
-    const timer = setTimeout(() => {
-      try {
-        const stored = sessionStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed)) setItems(parsed);
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) {
+          const validItems = parsed.filter(
+            (i): i is OrderItem =>
+              i &&
+              typeof i === "object" &&
+              typeof i.veg_id === "string" &&
+              typeof i.qty === "number" &&
+              Number.isFinite(i.qty) &&
+              i.qty > 0
+          );
+          setItems(validItems);
         }
-      } catch {
-        // ignore corrupt storage
       }
-      setIsLoaded(true);
-    }, 0);
-    return () => clearTimeout(timer);
+    } catch {
+      // ignore corrupt storage
+    }
+    setIsLoaded(true);
   }, []);
 
   // Persist to sessionStorage whenever the order list changes (only after initial load)

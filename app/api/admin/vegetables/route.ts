@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
       name_ta: nameTa,
       unit: body.unit.trim(),
       category: body.category,
-      allow_piece_mode: body.allow_piece_mode ?? false,
+      allow_piece_mode: body.allow_piece_mode ?? true,
       current_price: "0",
       image_url: body.image_data_url ?? null,
       is_curated_image: false,

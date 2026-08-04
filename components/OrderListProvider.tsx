@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useSyncExternalStore, ReactNode } from "react";
 
 export interface OrderItem {
   veg_id: string;
@@ -24,39 +24,44 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 
 const STORAGE_KEY = "ppr_order_list";
 
-export function OrderListProvider({ children }: { children: React.ReactNode }) {
-  const [items, setItems] = useState<OrderItem[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
+const emptySubscribe = () => () => {};
 
-  // Load from sessionStorage on mount to eliminate SSR hydration mismatch
-  useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) {
-          const validItems = parsed.filter(
-            (i): i is OrderItem =>
-              Boolean(i) &&
-              typeof i === "object" &&
-              typeof i.veg_id === "string" &&
-              i.veg_id.trim() !== "" &&
-              typeof i.name_en === "string" &&
-              typeof i.name_ta === "string" &&
-              typeof i.unit === "string" &&
-              (typeof i.image_url === "string" || i.image_url === null) &&
-              typeof i.qty === "number" &&
-              Number.isFinite(i.qty) &&
-              i.qty > 0
-          );
-          setItems(validItems);
-        }
+function loadInitialItems(): OrderItem[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (i): i is OrderItem =>
+            Boolean(i) &&
+            typeof i === "object" &&
+            typeof i.veg_id === "string" &&
+            i.veg_id.trim() !== "" &&
+            typeof i.name_en === "string" &&
+            typeof i.name_ta === "string" &&
+            typeof i.unit === "string" &&
+            (typeof i.image_url === "string" || i.image_url === null) &&
+            typeof i.qty === "number" &&
+            Number.isFinite(i.qty) &&
+            i.qty > 0
+        );
       }
-    } catch {
-      // ignore corrupt storage
     }
-    setIsLoaded(true);
-  }, []);
+  } catch {
+    // ignore corrupt storage
+  }
+  return [];
+}
+
+export function OrderListProvider({ children }: { children: ReactNode }) {
+  const [items, setItems] = useState<OrderItem[]>(loadInitialItems);
+  const isLoaded = useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
 
   // Persist to sessionStorage whenever the order list changes (only after initial load)
   useEffect(() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
@@ -15,7 +15,6 @@ const OTP_TIMEOUT_MS = 15_000;
 const RESEND_COOLDOWN_S = 30;
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const nextUrl = searchParams.get("next") ?? "/";
 

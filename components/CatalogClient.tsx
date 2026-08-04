@@ -293,6 +293,28 @@ function PieceStepper({
   );
 }
 
+function parseRawWeightInput(rawStr: string): { kg: number; isValid: boolean } {
+  const val = parseFloat(rawStr);
+  if (isNaN(val) || val <= 0) return { kg: 0, isValid: false };
+  // If user enters 10 or greater (e.g. 100, 250, 500, 1000), interpret as grams
+  if (val >= 10) {
+    const kg = val / 1000;
+    return { kg, isValid: kg >= 0.05 };
+  }
+  // Otherwise interpret as kilograms (e.g. 0.1, 0.25, 0.5, 1, 1.5)
+  return { kg: val, isValid: val >= 0.05 };
+}
+
+function formatWeightDisplay(kg: number): string {
+  if (kg <= 0) return "";
+  const grams = Math.round(kg * 1000);
+  if (kg >= 1) {
+    const formattedKg = Number.isInteger(kg) ? String(kg) : String(parseFloat(kg.toFixed(2)));
+    return `${grams}g / ${formattedKg}kg`;
+  }
+  return `${grams}g`;
+}
+
 // ── Kg Input Bar (typable numeric input, NO +/- buttons) ─────────────────────
 function KgInputBar({
   qty,
@@ -314,6 +336,8 @@ function KgInputBar({
     }
   }
 
+  const weightLabel = formatWeightDisplay(qty);
+
   return (
     <div
       style={{
@@ -333,7 +357,7 @@ function KgInputBar({
           border: "1.5px solid #1A6B47",
           borderRadius: "9999px",
           height: "100%",
-          padding: "0 12px",
+          padding: "0 10px",
           overflow: "hidden",
         }}
       >
@@ -351,30 +375,30 @@ function KgInputBar({
         <input
           type="number"
           inputMode="decimal"
-          step="0.1"
-          min="0.1"
-          placeholder="Enter kg (e.g. 1.5)"
+          step="any"
+          min="0.05"
+          placeholder="e.g. 500 or 1.5"
           value={inputValue}
           onChange={(e) => {
             setInputValue(e.target.value);
-            const val = parseFloat(e.target.value);
-            if (!isNaN(val) && val >= 0.1) {
-              onQuantityChange(val);
+            const { kg, isValid } = parseRawWeightInput(e.target.value);
+            if (isValid) {
+              onQuantityChange(kg);
             }
           }}
           onBlur={() => {
-            const val = parseFloat(inputValue);
-            if (isNaN(val) || val < 0.1) {
+            const { kg, isValid } = parseRawWeightInput(inputValue);
+            if (!isValid || kg < 0.1) {
               setInputValue("0.1");
               onQuantityChange(0.1);
             } else {
-              const formatted = parseFloat(val.toFixed(1));
-              setInputValue(String(formatted));
-              onQuantityChange(formatted);
+              const formattedKg = parseFloat(kg.toFixed(2));
+              setInputValue(String(formattedKg));
+              onQuantityChange(formattedKg);
             }
           }}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          aria-label="Quantity in kg"
+          aria-label="Quantity in weight"
           style={{
             flex: 1,
             width: "100%",
@@ -382,7 +406,7 @@ function KgInputBar({
             background: "transparent",
             border: "none",
             outline: "none",
-            fontSize: "0.9rem",
+            fontSize: "0.85rem",
             fontWeight: 700,
             color: "#111827",
             fontFamily: "var(--font)",
@@ -390,17 +414,23 @@ function KgInputBar({
             WebkitAppearance: "none",
           }}
         />
-        <span
-          style={{
-            fontSize: "0.78rem",
-            fontWeight: 700,
-            color: "#15803D",
-            marginLeft: "2px",
-            flexShrink: 0,
-          }}
-        >
-          kg
-        </span>
+        {weightLabel && (
+          <span
+            style={{
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              color: "#15803D",
+              background: "#DCFCE7",
+              padding: "2px 6px",
+              borderRadius: "9999px",
+              marginLeft: "4px",
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
+            {weightLabel}
+          </span>
+        )}
       </div>
 
       <button
@@ -504,10 +534,12 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
   const activeUnit = cartItem?.unit ?? veg.unit;
   const isKg = activeUnit === "kg";
 
+  const allowPiece = veg.allow_piece_mode ?? true;
+
   const handleAddToCartClick = () => {
     if (!shopOpen) return;
-    // Ask for unit selection on produce items that support dual-mode (allow_piece_mode === true)
-    if (veg.category !== "grocery" && veg.allow_piece_mode) {
+    // Ask for unit selection on produce items that support dual-mode
+    if (veg.category !== "grocery" && allowPiece) {
       setShowChoice(true);
     } else {
       // Direct add according to veg.unit (0.1 kg for weight items, 1 for piece/grocery)
@@ -522,7 +554,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
   };
 
   const handleSelectUnit = (selectedUnit: "kg" | "piece") => {
-    if (selectedUnit === "piece" && !veg.allow_piece_mode) return;
+    if (selectedUnit === "piece" && !allowPiece) return;
     setShowChoice(false);
     const initialQty = selectedUnit === "kg" ? 0.1 : 1;
     setQty(veg.id, initialQty, {
@@ -901,11 +933,11 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Scroll listener for collapsible header with hysteresis to prevent scroll chattering/vibration
+  // Scroll listener for collapsible header: hides top brand banner on scroll while keeping search bar sticky
   useEffect(() => {
     const handleScroll = () => {
       const y = window.scrollY;
-      if (y > 80) {
+      if (y > 110) {
         setIsScrolled(true);
       } else if (y < 20) {
         setIsScrolled(false);
@@ -973,21 +1005,21 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   return (
     <div className="page-content">
 
-      {/* ── Premium Collapsible Sticky Header ───────────────────────────────── */}
+      {/* ── Premium Sticky Header (Search bar remains pinned at top) ─────────── */}
       <header
         className={`catalog-header ${isScrolled ? "is-scrolled" : ""}`}
         style={{
           position: "sticky",
           top: 0,
           zIndex: 90,
-          background: isScrolled ? "rgba(255, 255, 255, 0.88)" : "var(--bg)",
-          backdropFilter: isScrolled ? "blur(18px)" : "none",
-          WebkitBackdropFilter: isScrolled ? "blur(18px)" : "none",
+          background: isScrolled ? "rgba(255, 255, 255, 0.94)" : "var(--bg)",
+          backdropFilter: "blur(18px)",
+          WebkitBackdropFilter: "blur(18px)",
           padding: isScrolled ? "12px 16px 14px" : "16px 16px 14px",
           borderBottomLeftRadius: isScrolled ? "22px" : "0px",
           borderBottomRightRadius: isScrolled ? "22px" : "0px",
-          boxShadow: isScrolled ? "0 8px 24px rgba(0, 0, 0, 0.06)" : "none",
-          borderBottom: isScrolled ? "1px solid rgba(0, 0, 0, 0.06)" : "none",
+          boxShadow: isScrolled ? "0 8px 24px rgba(0, 0, 0, 0.08)" : "none",
+          borderBottom: isScrolled ? "1px solid rgba(0, 0, 0, 0.08)" : "none",
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
         }}
       >
@@ -1208,7 +1240,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
           </p>
           <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-            தினமும் புதிதாக வாங்கப்படுகிறது — சேமிக்கப்படுவதில்லை. உங்கள் ஆர்டருக்காக வாங்குகிறோம், கிடங்கிலிருந்து அல்ல.
+            உங்கள் ஆர்டருக்காகவே தினமும் புதிதாக வாங்குகிறோம். முன்கூட்டியே சேமித்து வைக்கப்படுவதில்லை.
           </p>
         </div>
       </div>

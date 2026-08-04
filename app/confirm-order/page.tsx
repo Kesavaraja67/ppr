@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Widget } from "@/hooks/useMsg91Widget";
+import { useMsg91Ready } from "@/components/Msg91WidgetProvider";
 
 /** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -79,7 +79,7 @@ export default function ConfirmOrderPage() {
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
 
-  const { ready: widgetReady } = useMsg91Widget("msg91-captcha-order");
+  const { ready: widgetReady } = useMsg91Ready();
 
 
   // Modal Escape key & focus handling
@@ -280,7 +280,7 @@ export default function ConfirmOrderPage() {
 
     // Validate minimum quantities
     for (const item of items) {
-      const minQty = item.unit === "kg" ? 0.5 : 1;
+      const minQty = item.unit === "kg" ? 0.1 : 1;
       if (item.qty < minQty) {
         setSubmitError(`Minimum ${minQty} ${item.unit} required for ${item.name_en}`);
         return;
@@ -322,7 +322,8 @@ export default function ConfirmOrderPage() {
       setOtpError("Enter a valid 10-digit mobile number");
       return;
     }
-    if (!widgetReady) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!widgetReady || typeof (window as any).sendOtp !== "function") {
       setOtpError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
@@ -349,7 +350,8 @@ export default function ConfirmOrderPage() {
       setOtpError("Enter the OTP code sent to your mobile");
       return;
     }
-    if (!widgetReady) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!widgetReady || typeof (window as any).verifyOtp !== "function") {
       setOtpError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
@@ -455,13 +457,6 @@ export default function ConfirmOrderPage() {
 
   return (
     <div style={{ padding: "16px 16px 100px", maxWidth: "500px", margin: "0 auto" }} className="page-content">
-      {/* MSG91 widget captcha mount for this page */}
-      <div
-        id="msg91-captcha-order"
-        aria-hidden="true"
-        style={{ position: "absolute", width: 0, height: 0, overflow: "hidden", opacity: 0, pointerEvents: "none" }}
-      />
-
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <Link
@@ -504,7 +499,7 @@ export default function ConfirmOrderPage() {
                 <span style={{ color: "#9CA3AF", fontSize: "0.78rem" }}>({item.name_ta})</span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <span style={{ fontWeight: 700, color: "#1A6B47" }}>{item.qty} {item.unit}</span>
+                <span style={{ fontWeight: 700, color: "#1A6B47" }}>{item.qty} {item.unit === "piece" ? "pcs" : item.unit}</span>
                 <button
                   onClick={() => removeItem(item.veg_id)}
                   style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: "0.78rem" }}
@@ -791,15 +786,15 @@ export default function ConfirmOrderPage() {
             ) : (
               <div>
                 <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "16px" }}>
-                  Enter the 6-digit OTP code sent to <strong>+91 {onboardPhone}</strong>.
+                  Enter the 4-digit OTP code sent to <strong>+91 {onboardPhone}</strong>.
                 </p>
                 <input
                   ref={onboardOtpInputRef}
                   type="text"
                   value={onboardOtp}
-                  onChange={(e) => setOnboardOtp(e.target.value)}
-                  placeholder="Enter 6-digit code"
-                  maxLength={6}
+                  onChange={(e) => setOnboardOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  placeholder="• • • •"
+                  maxLength={4}
                   style={{
                     width: "100%",
                     padding: "14px",

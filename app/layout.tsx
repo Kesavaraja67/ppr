@@ -62,6 +62,7 @@ export const viewport: Viewport = {
 };
 
 import BottomNav from "@/components/BottomNav";
+import { Msg91WidgetProvider } from "@/components/Msg91WidgetProvider";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -97,10 +98,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body>
         <div id="app-wrapper">
-          <OrderListProvider>
-            {children}
-            <BottomNav />
-          </OrderListProvider>
+          <Msg91WidgetProvider>
+            <OrderListProvider>
+              {children}
+              <BottomNav />
+            </OrderListProvider>
+          </Msg91WidgetProvider>
         </div>
       </body>
     </html>

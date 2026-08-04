@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Widget } from "@/hooks/useMsg91Widget";
+import { useMsg91Ready } from "@/components/Msg91WidgetProvider";
 
 /** Abort an async operation after this many milliseconds. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -27,7 +27,7 @@ function LoginForm() {
 
   const otpInputRef = useRef<HTMLInputElement>(null);
 
-  const { ready: widgetReady } = useMsg91Widget("msg91-captcha");
+  const { ready: widgetReady } = useMsg91Ready();
 
 
   const handleSendOtp = (isResend = false) => {
@@ -36,7 +36,8 @@ function LoginForm() {
       setError("Enter a valid 10-digit mobile number");
       return;
     }
-    if (!widgetReady) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!widgetReady || typeof (window as any).sendOtp !== "function") {
       setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
@@ -78,7 +79,8 @@ function LoginForm() {
       setError("Enter the OTP sent to your phone");
       return;
     }
-    if (!widgetReady) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!widgetReady || typeof (window as any).verifyOtp !== "function") {
       setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
@@ -178,19 +180,6 @@ function LoginForm() {
         flexDirection: "column",
       }}
     >
-      {/* MSG91 widget captcha mount — kept in DOM as required by the widget */}
-      <div
-        id="msg91-captcha"
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          width: 0,
-          height: 0,
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none",
-        }}
-      />
 
       {/* Emerald top bar */}
       <div
@@ -484,9 +473,9 @@ function LoginForm() {
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
-              placeholder="• • • • • •"
+              placeholder="• • • •"
               value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
               onKeyDown={(e) => e.key === "Enter" && handleVerifyOtp()}
               style={{
                 width: "100%",
@@ -505,7 +494,7 @@ function LoginForm() {
                 marginBottom: "20px",
                 transition: "border-color 160ms, box-shadow 160ms",
               }}
-              maxLength={8}
+              maxLength={4}
             />
 
             {error && (

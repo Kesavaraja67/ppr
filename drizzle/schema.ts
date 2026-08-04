@@ -25,7 +25,8 @@ export const vegetables = pgTable("vegetables", {
   name_en: text("name_en").notNull(),
   name_ta: text("name_ta").notNull(),
   unit: text("unit").notNull(), // 'kg' | 'bunch' | 'piece' | 'dozen' | 'g'
-  category: text("category").notNull().default("vegetable"), // 'vegetable' | 'fruit' | 'leafy'
+  category: text("category").notNull().default("vegetable"), // 'vegetable' | 'fruit' | 'leafy' | 'grocery'
+  allow_piece_mode: boolean("allow_piece_mode").notNull().default(true),
   // Price fields kept in schema but NOT displayed on public catalog
   current_price: numeric("current_price").notNull().default("0"),
   original_price: numeric("original_price"),

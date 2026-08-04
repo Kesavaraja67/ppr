@@ -17,7 +17,7 @@ export interface DeliveryConfig {
 }
 
 export interface OrderLineCategorized {
-  category: "vegetable" | "fruit";
+  category: "vegetable" | "fruit" | "grocery" | string;
   line_total: number;
 }
 

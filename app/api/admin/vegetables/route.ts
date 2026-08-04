@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
     name_en: string;
     name_ta?: string; // optional — auto-filled from dict if not provided
     unit: string;
-    category: "vegetable" | "fruit";
+    category: "vegetable" | "fruit" | "grocery";
+    allow_piece_mode?: boolean;
     image_data_url?: string; // base64 JPEG resized client-side, ~30-50KB
   };
 
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const ALLOWED_CATEGORIES = ["vegetable", "fruit"];
+  const ALLOWED_CATEGORIES = ["vegetable", "fruit", "grocery"];
   if (!ALLOWED_CATEGORIES.includes(body.category)) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest) {
       name_ta: nameTa,
       unit: body.unit.trim(),
       category: body.category,
+      allow_piece_mode: body.allow_piece_mode ?? false,
       current_price: "0",
       image_url: body.image_data_url ?? null,
       is_curated_image: false,
@@ -98,7 +100,8 @@ export async function PATCH(req: NextRequest) {
     name_en?: string;
     name_ta?: string;
     unit?: string;
-    category?: "vegetable" | "fruit";
+    category?: "vegetable" | "fruit" | "grocery";
+    allow_piece_mode?: boolean;
     image_data_url?: string;
     in_stock?: boolean;
   };
@@ -113,7 +116,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "id is required" }, { status: 400 });
   }
 
-  if (body.category !== undefined && !["vegetable", "fruit"].includes(body.category)) {
+  if (body.category !== undefined && !["vegetable", "fruit", "grocery"].includes(body.category)) {
     return NextResponse.json({ error: "Invalid category" }, { status: 400 });
   }
 
@@ -128,6 +131,7 @@ export async function PATCH(req: NextRequest) {
       ...(body.name_ta !== undefined && { name_ta: body.name_ta }),
       ...(body.unit !== undefined && { unit: body.unit }),
       ...(body.category !== undefined && { category: body.category }),
+      ...(body.allow_piece_mode !== undefined && { allow_piece_mode: body.allow_piece_mode }),
       ...(body.image_data_url !== undefined && { image_url: body.image_data_url }),
       ...(body.in_stock !== undefined && { in_stock: body.in_stock }),
       updated_at: new Date(),

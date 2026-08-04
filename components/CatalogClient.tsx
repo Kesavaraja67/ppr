@@ -12,6 +12,7 @@ interface Vegetable {
   name_ta: string;
   unit: string;
   category: string;
+  allow_piece_mode?: boolean;
   in_stock: boolean;
   image_url: string | null;
 }
@@ -206,8 +207,8 @@ const STEPS = [
   },
 ];
 
-// ── Stepper ───────────────────────────────────────────────────────────────────
-function Stepper({
+// ── Piece Stepper (+1 / -1, whole numbers only) ──────────────────────────────
+function PieceStepper({
   qty,
   onDecrement,
   onIncrement,
@@ -227,19 +228,21 @@ function Stepper({
         height: "40px",
         width: "100%",
         overflow: "hidden",
+        padding: "0 4px",
       }}
     >
       <button
         onClick={onDecrement}
+        type="button"
         aria-label="Decrease quantity"
         style={{
-          width: "44px",
+          width: "40px",
           height: "100%",
           background: "none",
           border: "none",
           color: "#fff",
-          fontSize: "1.25rem",
-          fontWeight: 600,
+          fontSize: "1.3rem",
+          fontWeight: 700,
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
@@ -250,29 +253,32 @@ function Stepper({
       >
         −
       </button>
+
       <span
         style={{
           color: "#fff",
-          fontSize: "0.9rem",
+          fontSize: "0.95rem",
           fontWeight: 700,
           fontFamily: "var(--font)",
-          minWidth: "20px",
+          minWidth: "24px",
           textAlign: "center",
         }}
       >
         {qty}
       </span>
+
       <button
         onClick={onIncrement}
+        type="button"
         aria-label="Increase quantity"
         style={{
-          width: "44px",
+          width: "40px",
           height: "100%",
           background: "none",
           border: "none",
           color: "#fff",
-          fontSize: "1.25rem",
-          fontWeight: 600,
+          fontSize: "1.3rem",
+          fontWeight: 700,
           cursor: "pointer",
           display: "flex",
           alignItems: "center",
@@ -287,11 +293,151 @@ function Stepper({
   );
 }
 
+// ── Kg Input Bar (typable numeric input, NO +/- buttons) ─────────────────────
+function KgInputBar({
+  qty,
+  onQuantityChange,
+  onRemove,
+}: {
+  qty: number;
+  onQuantityChange: (newQty: number) => void;
+  onRemove: () => void;
+}) {
+  const [prevQty, setPrevQty] = useState(qty);
+  const [inputValue, setInputValue] = useState<string>(() => (qty > 0 ? String(qty) : "1"));
+
+  if (prevQty !== qty) {
+    setPrevQty(qty);
+    setInputValue(qty > 0 ? String(qty) : "1");
+  }
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "6px",
+        width: "100%",
+        height: "40px",
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          background: "#F0FDF4",
+          border: "1.5px solid #1A6B47",
+          borderRadius: "9999px",
+          height: "100%",
+          padding: "0 12px",
+          overflow: "hidden",
+        }}
+      >
+        <span
+          style={{
+            fontSize: "0.72rem",
+            fontWeight: 700,
+            color: "#166534",
+            marginRight: "4px",
+            flexShrink: 0,
+          }}
+        >
+          Qty:
+        </span>
+        <input
+          type="number"
+          inputMode="decimal"
+          step="0.1"
+          min="0.1"
+          placeholder="Enter kg (e.g. 1.5)"
+          value={inputValue}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            const val = parseFloat(e.target.value);
+            if (!isNaN(val) && val >= 0.1) {
+              onQuantityChange(parseFloat(val.toFixed(1)));
+            }
+          }}
+          onBlur={() => {
+            const val = parseFloat(inputValue);
+            if (isNaN(val) || val < 0.1) {
+              setInputValue("0.1");
+              onQuantityChange(0.1);
+            } else {
+              const formatted = parseFloat(val.toFixed(1));
+              setInputValue(String(formatted));
+              onQuantityChange(formatted);
+            }
+          }}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          aria-label="Quantity in kg"
+          style={{
+            flex: 1,
+            width: "100%",
+            minWidth: "0",
+            background: "transparent",
+            border: "none",
+            outline: "none",
+            fontSize: "0.9rem",
+            fontWeight: 700,
+            color: "#111827",
+            fontFamily: "var(--font)",
+            MozAppearance: "textfield",
+            WebkitAppearance: "none",
+          }}
+        />
+        <span
+          style={{
+            fontSize: "0.78rem",
+            fontWeight: 700,
+            color: "#15803D",
+            marginLeft: "2px",
+            flexShrink: 0,
+          }}
+        >
+          kg
+        </span>
+      </div>
+
+      <button
+        onClick={onRemove}
+        type="button"
+        aria-label="Remove item from cart"
+        title="Remove item"
+        style={{
+          width: "36px",
+          height: "40px",
+          borderRadius: "12px",
+          background: "#FEE2E2",
+          border: "none",
+          color: "#DC2626",
+          fontSize: "1.1rem",
+          fontWeight: 700,
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexShrink: 0,
+          transition: "background 150ms",
+        }}
+        onMouseOver={(e) => (e.currentTarget.style.background = "#FCA5A5")}
+        onMouseOut={(e) => (e.currentTarget.style.background = "#FEE2E2")}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 // ── Order list icon (green bg for white header) ───────────────────────────────
 function OrderListIcon({ count }: { count: number }) {
+  const isMounted = useIsMounted();
+  const displayCount = isMounted ? count : 0;
+
   return (
     <button
-      aria-label={`View order list — ${count} item${count !== 1 ? "s" : ""}`}
+      aria-label={`View order list — ${displayCount} item${displayCount !== 1 ? "s" : ""}`}
       style={{
         position: "relative",
         background: "#E6F4EE",
@@ -312,7 +458,7 @@ function OrderListIcon({ count }: { count: number }) {
       }}
     >
       <OrderIcon />
-      {count > 0 && (
+      {displayCount > 0 && (
         <span
           aria-hidden="true"
           style={{
@@ -342,32 +488,72 @@ function OrderListIcon({ count }: { count: number }) {
 
 // ── Product Card ──────────────────────────────────────────────────────────────
 function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
-  const { setQty, getQty } = useOrderList();
+  const { items, setQty, getQty } = useOrderList();
   const qty = getQty(veg.id);
+  const cartItem = items.find((i) => i.veg_id === veg.id);
   const color = CARD_COLORS[hashIndex(veg.id)];
 
   const [overrideSrc, setOverrideSrc] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
+  const [showChoice, setShowChoice] = useState(false);
 
-  const imgSrc = overrideSrc ?? veg.image_url;
+  // Active unit based on cart item or default vegetable unit
+  const activeUnit = cartItem?.unit ?? veg.unit;
+  const isKg = activeUnit === "kg";
 
-  // kg items step by 0.5; packet/dozen/piece/bunch/bag step by whole 1
-  const step = veg.unit === "kg" ? 0.5 : 1;
-
-  const increment = () => {
+  const handleAddToCartClick = () => {
     if (!shopOpen) return;
-    setQty(veg.id, parseFloat((qty + step).toFixed(1)), {
+    // Ask for unit selection on ALL produce items (vegetables & fruits, including Banana)
+    if (veg.category !== "grocery") {
+      setShowChoice(true);
+    } else {
+      // Grocery items (milk, curd, powder, etc.) add 1 piece directly
+      setQty(veg.id, 1, {
+        name_en: veg.name_en,
+        name_ta: veg.name_ta,
+        unit: veg.unit,
+        image_url: veg.image_url,
+      });
+    }
+  };
+
+  const handleSelectUnit = (selectedUnit: "kg" | "piece") => {
+    setShowChoice(false);
+    const initialQty = selectedUnit === "kg" ? 0.1 : 1;
+    setQty(veg.id, initialQty, {
       name_en: veg.name_en,
       name_ta: veg.name_ta,
-      unit: veg.unit,
+      unit: selectedUnit,
       image_url: veg.image_url,
     });
   };
 
-  const decrement = () => {
+  const handleIncrementPiece = () => {
     if (!shopOpen) return;
-    setQty(veg.id, parseFloat(Math.max(0, qty - step).toFixed(1)));
+    setQty(veg.id, Math.round(qty + 1), {
+      name_en: veg.name_en,
+      name_ta: veg.name_ta,
+      unit: activeUnit,
+      image_url: veg.image_url,
+    });
   };
+
+  const handleDecrementPiece = () => {
+    if (!shopOpen) return;
+    const nextQty = Math.round(qty - 1);
+    if (nextQty < 1) {
+      setQty(veg.id, 0);
+    } else {
+      setQty(veg.id, nextQty, {
+        name_en: veg.name_en,
+        name_ta: veg.name_ta,
+        unit: activeUnit,
+        image_url: veg.image_url,
+      });
+    }
+  };
+
+  const imgSrc = overrideSrc ?? veg.image_url;
 
   return (
     <div
@@ -509,38 +695,107 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
             fontFamily: "var(--font)",
           }}
         >
-          {veg.name_ta} · per {veg.unit}
+          {veg.name_ta} · per {activeUnit}
         </p>
 
         {veg.in_stock ? (
           qty === 0 ? (
-            <button
-              onClick={increment}
-              style={{
-                width: "100%",
-                height: "40px",
-                background: "#1A6B47",
-                color: "#fff",
-                border: "none",
-                borderRadius: "9999px",
-                fontFamily: "var(--font)",
-                fontWeight: 600,
-                fontSize: "0.8rem",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-                transition: "background 150ms",
-              }}
-              onMouseOver={(e) => (e.currentTarget.style.background = "#124D33")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "#1A6B47")}
-            >
-              <PlusIcon />
-              Add to Cart
-            </button>
+            showChoice ? (
+              /* Inline Unit Choice Selector when Add to Cart is clicked */
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <span
+                  style={{
+                    fontSize: "0.68rem",
+                    fontWeight: 700,
+                    color: "#374151",
+                    textAlign: "center",
+                  }}
+                >
+                  Select Unit:
+                </span>
+                <div style={{ display: "flex", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectUnit("kg")}
+                    style={{
+                      flex: 1,
+                      height: "36px",
+                      background: "#1A6B47",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "9999px",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    By Weight
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectUnit("piece")}
+                    style={{
+                      flex: 1,
+                      height: "36px",
+                      background: "#F3F4F6",
+                      color: "#1F2937",
+                      border: "1px solid #D1D5DB",
+                      borderRadius: "9999px",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    By Piece
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={handleAddToCartClick}
+                style={{
+                  width: "100%",
+                  height: "40px",
+                  background: "#1A6B47",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "9999px",
+                  fontFamily: "var(--font)",
+                  fontWeight: 600,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  transition: "background 150ms",
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.background = "#124D33")}
+                onMouseOut={(e) => (e.currentTarget.style.background = "#1A6B47")}
+              >
+                <PlusIcon />
+                Add to Cart
+              </button>
+            )
+          ) : isKg ? (
+            <KgInputBar
+              qty={qty}
+              onQuantityChange={(newQty) =>
+                setQty(veg.id, newQty, {
+                  name_en: veg.name_en,
+                  name_ta: veg.name_ta,
+                  unit: activeUnit,
+                  image_url: veg.image_url,
+                })
+              }
+              onRemove={() => setQty(veg.id, 0)}
+            />
           ) : (
-            <Stepper qty={qty} onDecrement={decrement} onIncrement={increment} />
+            <PieceStepper
+              qty={qty}
+              onDecrement={handleDecrementPiece}
+              onIncrement={handleIncrementPiece}
+            />
           )
         ) : null}
       </div>
@@ -558,7 +813,15 @@ function isWithinOrderWindow(): boolean {
   return h >= 8 && h < 20;
 }
 
-const emptySubscribe = () => () => {};
+const emptySubscribe = () => () => { };
+
+function useIsMounted(): boolean {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+}
 
 function useIsStandalone(): boolean {
   return useSyncExternalStore(
@@ -600,8 +863,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
   const { totalCount } = useOrderList();
 
-  type Category = "all" | "vegetable" | "fruit";
-
+  type Category = "all" | "vegetable" | "fruit" | "grocery";
 
   const [category, setCategory] = useState<Category>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -614,12 +876,13 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Scroll listener for collapsible header
+  // Scroll listener for collapsible header with hysteresis to prevent scroll chattering/vibration
   useEffect(() => {
     const handleScroll = () => {
-      if (window.scrollY > 35) {
+      const y = window.scrollY;
+      if (y > 80) {
         setIsScrolled(true);
-      } else {
+      } else if (y < 20) {
         setIsScrolled(false);
       }
     };
@@ -674,9 +937,10 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     );
 
   const categories: Array<{ id: Category; label: string }> = [
-    { id: "all",       label: "All Items" },
+    { id: "all", label: "All Items" },
     { id: "vegetable", label: "Vegetables" },
-    { id: "fruit",     label: "Fruits" },
+    { id: "fruit", label: "Fruits" },
+    { id: "grocery", label: "Groceries" },
   ];
 
   const activeLabel = categories.find((c) => c.id === category)?.label ?? "Fresh Picks";
@@ -735,15 +999,15 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
-                src="/logo.png?v=6" 
-                alt="P.P.R. Fruits & Vegetables Logo" 
-                style={{ 
-                  width: "100%", 
-                  height: "100%", 
+              <img
+                src="/logo.png?v=6"
+                alt="P.P.R. Fruits & Vegetables Logo"
+                style={{
+                  width: "100%",
+                  height: "100%",
                   objectFit: "cover",
                   display: "block",
-                }} 
+                }}
               />
             </div>
             <div>

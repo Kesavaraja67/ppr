@@ -8,6 +8,7 @@ interface Vegetable {
   name_ta: string;
   unit: string;
   category: string;
+  allow_piece_mode?: boolean;
   in_stock: boolean;
   image_url: string | null;
 }
@@ -16,6 +17,7 @@ const UNITS = ["kg", "g", "bunch", "piece", "dozen", "bag"];
 const CATEGORIES = [
   { value: "vegetable", label: "Vegetable" },
   { value: "fruit", label: "Fruit" },
+  { value: "grocery", label: "Grocery" },
 ];
 
 function LeafIcon({ color = "#166534" }: { color?: string }) {
@@ -95,6 +97,7 @@ export default function AdminVegetablesPage() {
   const [nameTaLoading, setNameTaLoading] = useState(false);
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("vegetable");
+  const [allowPieceMode, setAllowPieceMode] = useState(true);
   const [imageData, setImageData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -134,6 +137,7 @@ export default function AdminVegetablesPage() {
     setNameTa(veg.name_ta);
     setUnit(veg.unit);
     setCategory(veg.category);
+    setAllowPieceMode(veg.allow_piece_mode ?? true);
     setImageData(veg.image_url);
     setShowAdd(false);
   };
@@ -143,6 +147,7 @@ export default function AdminVegetablesPage() {
     setNameTa("");
     setUnit("kg");
     setCategory("vegetable");
+    setAllowPieceMode(true);
     setImageData(null);
     setShowAdd(false);
     setEditingVeg(null);
@@ -163,6 +168,7 @@ export default function AdminVegetablesPage() {
           name_ta: nameTa.trim() || undefined,
           unit,
           category,
+          allow_piece_mode: allowPieceMode,
           image_data_url: imageData ?? undefined,
         }),
       });
@@ -187,6 +193,7 @@ export default function AdminVegetablesPage() {
           name_ta: nameTa.trim() || undefined,
           unit,
           category,
+          allow_piece_mode: allowPieceMode,
           image_data_url: imageData ?? undefined,
         }),
       });
@@ -351,6 +358,19 @@ export default function AdminVegetablesPage() {
                 {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Dual ordering mode checkbox */}
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={allowPieceMode}
+                onChange={(e) => setAllowPieceMode(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "#166534" }}
+              />
+              Also allow ordering by piece (Weight / Piece mode toggle for customers)
+            </label>
           </div>
 
           {/* Photo upload */}

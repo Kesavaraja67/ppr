@@ -66,9 +66,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Validate each item — kg items may be 0.5 minimum, other units require >= 1
+  // Verify all vegetable IDs exist and check unit / mode permissions
+  const vegIds = body.items.map((i) => i.veg_id);
+  const foundVegs = await db
+    .select({
+      id: vegetables.id,
+      unit: vegetables.unit,
+      allow_piece_mode: vegetables.allow_piece_mode,
+      name_en: vegetables.name_en,
+    })
+    .from(vegetables)
+    .where(inArray(vegetables.id, vegIds));
+
+  const vegMap = new Map(foundVegs.map((v) => [v.id, v]));
+
   for (const item of body.items) {
-    const minQty = item.unit === "kg" ? 0.5 : 1;
+    const dbVeg = vegMap.get(item.veg_id);
+    if (!dbVeg) {
+      return NextResponse.json(
+        { error: `Item not found: ${item.veg_id}` },
+        { status: 400 }
+      );
+    }
+
+    // Reject piece mode submissions if vegetable is base-kg and allow_piece_mode is false
+    if (item.unit === "piece" && dbVeg.unit === "kg" && !dbVeg.allow_piece_mode) {
+      return NextResponse.json(
+        { error: `Ordering by piece is not allowed for ${dbVeg.name_en}` },
+        { status: 400 }
+      );
+    }
+
+    // Minimum quantity validation: kg items require min 0.1 (100g), other units require min 1
+    const minQty = item.unit === "kg" ? 0.1 : 1;
     if (item.qty < minQty) {
       return NextResponse.json(
         { error: `Minimum quantity is ${minQty} ${item.unit} per item` },
@@ -175,25 +205,6 @@ export async function POST(req: NextRequest) {
   // We still allow order creation, just with cancellable_until in the past
   const cancellableUntil = cancellableUntilIST;
 
-
-  // Verify all vegetable IDs exist
-  const vegIds = body.items.map((i) => i.veg_id);
-  const foundVegs = await db
-    .select({ id: vegetables.id, unit: vegetables.unit })
-    .from(vegetables)
-    .where(inArray(vegetables.id, vegIds));
-
-  const vegMap = new Map(foundVegs.map((v) => [v.id, v.unit]));
-
-  for (const item of body.items) {
-    if (!vegMap.has(item.veg_id)) {
-      return NextResponse.json(
-        { error: `Item not found: ${item.veg_id}` },
-        { status: 400 }
-      );
-    }
-  }
-
   // Save customer name if provided (upsert on users.name)
   const trimmedName = body.name?.trim();
   if (trimmedName) {
@@ -240,7 +251,7 @@ export async function POST(req: NextRequest) {
           order_id: order.id,
           veg_id: item.veg_id,
           requested_qty: String(item.qty),
-          unit: item.unit || vegMap.get(item.veg_id) || "kg",
+          unit: item.unit || vegMap.get(item.veg_id)?.unit || "kg",
         }))
       );
 

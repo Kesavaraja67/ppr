@@ -23,8 +23,6 @@ import { eq } from "drizzle-orm";
 const client = postgres(process.env.DATABASE_URL!, { max: 1 });
 const db = drizzle(client, { schema });
 
-const INITIAL_PIN = "1987"; // ← CHANGE THIS AFTER FIRST LOGIN
-
 async function main() {
   console.log("⏳ Seeding database…");
 

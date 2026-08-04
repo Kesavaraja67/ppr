@@ -25,31 +25,35 @@ const OrderListContext = createContext<OrderListContextValue | null>(null);
 const STORAGE_KEY = "ppr_order_list";
 
 export function OrderListProvider({ children }: { children: React.ReactNode }) {
-  // Lazy initializer reads from sessionStorage once at mount — avoids setState-in-effect
-  // and hydration mismatch (window is only available client-side, which is safe here
-  // because this component is always rendered inside a "use client" boundary).
-  const [items, setItems] = useState<OrderItem[]>(() => {
-    if (typeof window === "undefined") return [];
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {
-      // ignore corrupt storage
-    }
-    return [];
-  });
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Persist to sessionStorage whenever the order list changes
+  // Load from sessionStorage after initial mount to eliminate SSR hydration mismatch
   useEffect(() => {
+    const timer = setTimeout(() => {
+      try {
+        const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed)) setItems(parsed);
+        }
+      } catch {
+        // ignore corrupt storage
+      }
+      setIsLoaded(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Persist to sessionStorage whenever the order list changes (only after initial load)
+  useEffect(() => {
+    if (!isLoaded) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       // ignore
     }
-  }, [items]);
+  }, [items, isLoaded]);
 
   const setQty = useCallback(
     (
@@ -63,7 +67,9 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
           return prev.filter((i) => i.veg_id !== veg_id);
         }
         if (existing) {
-          return prev.map((i) => (i.veg_id === veg_id ? { ...i, qty } : i));
+          return prev.map((i) =>
+            i.veg_id === veg_id ? { ...i, qty, ...(meta ? meta : {}) } : i
+          );
         }
         if (!meta) return prev; // can't add without metadata
         return [...prev, { veg_id, qty, ...meta }];

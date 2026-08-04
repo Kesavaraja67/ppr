@@ -7,6 +7,7 @@ import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
 import { useMsg91Ready } from "@/components/Msg91WidgetProvider";
+import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 
 /** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -78,6 +79,7 @@ export default function ConfirmOrderPage() {
 
   const onboardPhoneInputRef = useRef<HTMLInputElement>(null);
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
+  const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
   const { ready: widgetReady } = useMsg91Ready();
 
@@ -88,6 +90,7 @@ export default function ConfirmOrderPage() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        resetVerification();
         setShowOnboarding(false);
       }
     };
@@ -101,7 +104,7 @@ export default function ConfirmOrderPage() {
     }, 50);
 
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showOnboarding, onboardingStep]);
+  }, [showOnboarding, onboardingStep, resetVerification]);
 
   function isWithinOrderWindow(): boolean {
     const nowIST = new Date(
@@ -317,6 +320,8 @@ export default function ConfirmOrderPage() {
 
   // OTP Handling inside onboarding
   const handleSendOtp = () => {
+    if (otpLoading || isVerifying()) return;
+    resetVerification();
     const cleaned = normalizeIndianMobile(onboardPhone);
     if (cleaned.length !== 10) {
       setOtpError("Enter a valid 10-digit mobile number");
@@ -329,15 +334,27 @@ export default function ConfirmOrderPage() {
     }
     setOtpError("");
     setOtpLoading(true);
+
+    let timedOut = false;
+    const sendTimer = setTimeout(() => {
+      timedOut = true;
+      setOtpError("OTP request timed out. Please check your connection and try again.");
+      setOtpLoading(false);
+    }, OTP_TIMEOUT_MS);
+
     // @ts-expect-error exposed by the MSG91 widget script
     window.sendOtp(
       `91${cleaned}`,
       () => {
+        if (timedOut) return;
+        clearTimeout(sendTimer);
         setOnboardingStep("otp");
         setOtpLoading(false);
         setTimeout(() => onboardOtpInputRef.current?.focus(), 50);
       },
       (err: unknown) => {
+        if (timedOut) return;
+        clearTimeout(sendTimer);
         setOtpError("Failed to send OTP. Please try again.");
         setOtpLoading(false);
         console.error(err);
@@ -346,6 +363,7 @@ export default function ConfirmOrderPage() {
   };
 
   const handleVerifyOtp = () => {
+    if (otpLoading || isVerifying()) return;
     if (!onboardOtp || onboardOtp.length < 4) {
       setOtpError("Enter the OTP code sent to your mobile");
       return;
@@ -355,12 +373,15 @@ export default function ConfirmOrderPage() {
       setOtpError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
+    const attemptId = startVerification();
+    if (!attemptId) return;
     setOtpError("");
     setOtpLoading(true);
 
     let timedOut = false;
     const verifyTimer = setTimeout(() => {
       timedOut = true;
+      resetVerification(attemptId);
       setOtpError("Verification timed out. Please try again.");
       setOtpLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -369,7 +390,7 @@ export default function ConfirmOrderPage() {
     window.verifyOtp(
       onboardOtp,
       async (data: { message: string }) => {
-        if (timedOut) return;
+        if (timedOut || !isValidAttempt(attemptId)) return;
         clearTimeout(verifyTimer);
         try {
           const controller = new AbortController();
@@ -381,18 +402,33 @@ export default function ConfirmOrderPage() {
             signal: controller.signal,
           });
           clearTimeout(fetchTimer);
-          if (timedOut) return;
-          const json = await res.json();
+          if (timedOut || !isValidAttempt(attemptId)) return;
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let json: any = {};
+          try {
+            json = await res.json();
+          } catch {
+            // HTML error response from Vercel edge/gateway (e.g. 503/504)
+          }
+
           if (!res.ok) {
-            setOtpError(json.error ?? "Verification failed. Please check the OTP code.");
+            resetVerification(attemptId);
+            setOtpError(
+              json.error ??
+              (res.status === 503
+                ? "Service temporarily busy. Please tap Confirm OTP again."
+                : "Verification failed. Please check the OTP code.")
+            );
             setOtpLoading(false);
             return;
           }
+          resetVerification(attemptId);
           setLoggedIn(true);
           setShowOnboarding(false);
           await executeOrderSubmission();
         } catch (e) {
-          if (timedOut) return;
+          if (timedOut || !isValidAttempt(attemptId)) return;
+          resetVerification(attemptId);
           const isAbort = e instanceof Error && e.name === "AbortError";
           setOtpError(
             isAbort
@@ -403,8 +439,9 @@ export default function ConfirmOrderPage() {
         }
       },
       (err: unknown) => {
-        if (timedOut) return;
+        if (timedOut || !isValidAttempt(attemptId)) return;
         clearTimeout(verifyTimer);
+        resetVerification(attemptId);
         setOtpError("Invalid or expired OTP code.");
         setOtpLoading(false);
         console.error(err);

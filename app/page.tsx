@@ -18,6 +18,7 @@ export default async function CatalogPage() {
         name_ta: vegetables.name_ta,
         unit: vegetables.unit,
         category: vegetables.category,
+        allow_piece_mode: vegetables.allow_piece_mode,
         in_stock: vegetables.in_stock,
         image_url: vegetables.image_url,
       })

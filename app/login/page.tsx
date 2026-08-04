@@ -26,12 +26,13 @@ function LoginForm() {
   const [resendCountdown, setResendCountdown] = useState(0);
 
   const otpInputRef = useRef<HTMLInputElement>(null);
-  const { isVerifying, startVerification, resetVerification } = useOtpVerificationGuard();
+  const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
   const { ready: widgetReady } = useMsg91Ready();
 
   const handleSendOtp = (isResend = false) => {
     if (loading || isVerifying()) return;
+    resetVerification();
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
@@ -86,7 +87,8 @@ function LoginForm() {
       setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
-    if (!startVerification()) return;
+    const attemptId = startVerification();
+    if (!attemptId) return;
     setError("");
     setLoading(true);
 
@@ -94,7 +96,7 @@ function LoginForm() {
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const verifyTimer = setTimeout(() => {
       timedOut = true;
-      resetVerification();
+      resetVerification(attemptId);
       setError("Verification timed out. Please try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -103,7 +105,7 @@ function LoginForm() {
     window.verifyOtp(
       code,
       async (data: { message: string }) => {
-        if (timedOut) return;
+        if (timedOut || !isValidAttempt(attemptId)) return;
         clearTimeout(verifyTimer);
         try {
           const controller = new AbortController();
@@ -115,7 +117,7 @@ function LoginForm() {
             signal: controller.signal,
           });
           clearTimeout(fetchTimer);
-          if (timedOut) return;
+          if (timedOut || !isValidAttempt(attemptId)) return;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           let json: any = {};
           try {
@@ -125,12 +127,12 @@ function LoginForm() {
           }
 
           if (!res.ok) {
-            resetVerification();
+            resetVerification(attemptId);
             setError(
               json.error ??
                 (res.status === 503
                   ? "Service temporarily busy. Please tap Confirm OTP again."
-                  : "Verification failed. Please try again.")
+                  : "Verification failed. Please check the OTP code.")
             );
             setLoading(false);
             return;
@@ -138,8 +140,8 @@ function LoginForm() {
           // Hard top-level navigation ensures the browser HTTP-only session cookie is sent on the request
           window.location.href = nextUrl;
         } catch (e) {
-          if (timedOut) return;
-          resetVerification();
+          if (timedOut || !isValidAttempt(attemptId)) return;
+          resetVerification(attemptId);
           const isAbort = e instanceof Error && e.name === "AbortError";
           setError(
             isAbort
@@ -150,9 +152,9 @@ function LoginForm() {
         }
       },
       (err: unknown) => {
-        if (timedOut) return;
+        if (timedOut || !isValidAttempt(attemptId)) return;
         clearTimeout(verifyTimer);
-        resetVerification();
+        resetVerification(attemptId);
         setError("Invalid or expired OTP code.");
         setLoading(false);
         console.error(err);

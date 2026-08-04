@@ -388,7 +388,7 @@ function KgInputBar({
           }}
           onBlur={() => {
             const { kg, isValid } = parseRawWeightInput(inputValue);
-            if (!isValid || kg < 0.1) {
+            if (!isValid || kg < 0.05) {
               setInputValue("0.1");
               onQuantityChange(0.1);
             } else {
@@ -786,7 +786,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
                   >
                     By Weight / எடை
                   </button>
-                  {veg.allow_piece_mode && (
+                  {allowPiece && (
                     <button
                       type="button"
                       onClick={() => handleSelectUnit("piece")}

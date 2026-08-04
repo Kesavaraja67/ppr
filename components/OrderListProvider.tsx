@@ -37,9 +37,14 @@ export function OrderListProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsed)) {
           const validItems = parsed.filter(
             (i): i is OrderItem =>
-              i &&
+              Boolean(i) &&
               typeof i === "object" &&
               typeof i.veg_id === "string" &&
+              i.veg_id.trim() !== "" &&
+              typeof i.name_en === "string" &&
+              typeof i.name_ta === "string" &&
+              typeof i.unit === "string" &&
+              (typeof i.image_url === "string" || i.image_url === null) &&
               typeof i.qty === "number" &&
               Number.isFinite(i.qty) &&
               i.qty > 0

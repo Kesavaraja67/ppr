@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
+  if (body.allow_piece_mode !== undefined && typeof body.allow_piece_mode !== "boolean") {
+    return NextResponse.json({ error: "allow_piece_mode must be a boolean" }, { status: 400 });
+  }
+
   if (!body.name_en?.trim() || !body.unit?.trim() || !body.category) {
     return NextResponse.json(
       { error: "name_en, unit, and category are required" },
@@ -110,6 +114,10 @@ export async function PATCH(req: NextRequest) {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  if (body.allow_piece_mode !== undefined && typeof body.allow_piece_mode !== "boolean") {
+    return NextResponse.json({ error: "allow_piece_mode must be a boolean" }, { status: 400 });
   }
 
   if (!body.id) {

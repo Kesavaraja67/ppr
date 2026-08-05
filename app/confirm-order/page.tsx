@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
 import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 
@@ -49,7 +49,7 @@ function CloseIcon() {
   );
 }
 
-export default function ConfirmOrderPage() {
+function ConfirmOrderContent() {
   const router = useRouter();
   const { items, removeItem, clearAll } = useOrderList();
 
@@ -82,7 +82,7 @@ export default function ConfirmOrderPage() {
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
   const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
-  const { ready: widgetReady } = useMsg91Ready();
+  const { ready: widgetReady, setShowCaptcha } = useMsg91Ready();
 
 
   // Modal Escape key & focus handling
@@ -319,6 +319,22 @@ export default function ConfirmOrderPage() {
     await executeOrderSubmission();
   };
 
+
+
+  // Modal Escape key & focus handling
+  useEffect(() => {
+    if (!showOnboarding) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        resetVerification();
+        setShowOnboarding(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showOnboarding, resetVerification]);
+
   // OTP Handling inside onboarding
   const handleSendOtp = () => {
     if (otpLoading || isVerifying()) return;
@@ -335,11 +351,13 @@ export default function ConfirmOrderPage() {
     }
     setOtpError("");
     setOtpLoading(true);
+    setShowCaptcha(true);
 
     let timedOut = false;
     const sendTimer = setTimeout(() => {
       timedOut = true;
       resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+      setShowCaptcha(false);
       setOtpError("OTP request timed out. Please check your connection or Captcha and try again.");
       setOtpLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -350,6 +368,7 @@ export default function ConfirmOrderPage() {
       () => {
         if (timedOut) return;
         clearTimeout(sendTimer);
+        setShowCaptcha(false);
         setOnboardingStep("otp");
         setOtpLoading(false);
         setTimeout(() => onboardOtpInputRef.current?.focus(), 50);
@@ -358,6 +377,7 @@ export default function ConfirmOrderPage() {
         if (timedOut) return;
         clearTimeout(sendTimer);
         resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+        setShowCaptcha(false);
         setOtpError("Failed to send OTP. Please try again.");
         setOtpLoading(false);
         console.error(err);
@@ -884,5 +904,13 @@ export default function ConfirmOrderPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function ConfirmOrderPage() {
+  return (
+    <Msg91WidgetProvider>
+      <ConfirmOrderContent />
+    </Msg91WidgetProvider>
   );
 }

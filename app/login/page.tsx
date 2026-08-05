@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
 import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 
@@ -29,7 +29,7 @@ function LoginForm() {
   const otpInputRef = useRef<HTMLInputElement>(null);
   const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
-  const { ready: widgetReady } = useMsg91Ready();
+  const { ready: widgetReady, setShowCaptcha } = useMsg91Ready();
 
   const handleSendOtp = (isResend = false) => {
     if (loading || isVerifying()) return;
@@ -46,12 +46,14 @@ function LoginForm() {
     }
     setError("");
     setLoading(true);
+    setShowCaptcha(true);
 
     let timedOut = false;
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const timer = setTimeout(() => {
       timedOut = true;
       resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+      setShowCaptcha(false);
       setError("OTP request timed out. Please check your connection or Captcha and try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -62,6 +64,7 @@ function LoginForm() {
       () => {
         if (timedOut) return;
         clearTimeout(timer);
+        setShowCaptcha(false);
         if (!isResend) setStep("otp");
         setLoading(false);
         setResendCountdown(RESEND_COOLDOWN_S);
@@ -71,6 +74,7 @@ function LoginForm() {
         if (timedOut) return;
         clearTimeout(timer);
         resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+        setShowCaptcha(false);
         setError("Failed to send OTP. Please try again.");
         setLoading(false);
         console.error(err);
@@ -629,7 +633,9 @@ export default function LoginPage() {
         </div>
       }
     >
-      <LoginForm />
+      <Msg91WidgetProvider>
+        <LoginForm />
+      </Msg91WidgetProvider>
     </Suspense>
   );
 }

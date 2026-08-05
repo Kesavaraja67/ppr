@@ -6,7 +6,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Ready } from "@/components/Msg91WidgetProvider";
+import { useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 
 /** Abort an async operation after this many milliseconds. */
@@ -50,7 +51,8 @@ function LoginForm() {
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const timer = setTimeout(() => {
       timedOut = true;
-      setError("OTP request timed out. Please check your connection and try again.");
+      resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+      setError("OTP request timed out. Please check your connection or Captcha and try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
 
@@ -68,6 +70,7 @@ function LoginForm() {
       (err: unknown) => {
         if (timedOut) return;
         clearTimeout(timer);
+        resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
         setError("Failed to send OTP. Please try again.");
         setLoading(false);
         console.error(err);

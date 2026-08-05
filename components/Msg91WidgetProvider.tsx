@@ -21,12 +21,10 @@ export function Msg91WidgetProvider({ children }: { children: React.ReactNode })
         id={GLOBAL_CAPTCHA_RENDER_ID}
         aria-hidden="true"
         style={{
-          position: "absolute",
-          width: 0,
-          height: 0,
-          overflow: "hidden",
-          opacity: 0,
-          pointerEvents: "none",
+          position: "fixed",
+          bottom: "16px",
+          right: "16px",
+          zIndex: 99999,
         }}
       />
       {children}

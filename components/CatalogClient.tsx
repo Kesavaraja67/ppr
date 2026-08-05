@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useSyncExternalStore } from "react";
+import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderList } from "./OrderListProvider";
 
@@ -518,7 +518,7 @@ function ProductCard({
 }: {
   veg: Vegetable;
   shopOpen: boolean;
-  onOpenChoice: (veg: Vegetable) => void;
+  onOpenChoice: (veg: Vegetable, e: React.MouseEvent) => void;
 }) {
   const { items, setQty, getQty } = useOrderList();
   const isMounted = useIsMounted();
@@ -535,11 +535,11 @@ function ProductCard({
 
   const allowPiece = veg.allow_piece_mode ?? true;
 
-  const handleAddToCartClick = () => {
+  const handleAddToCartClick = (e: React.MouseEvent) => {
     if (!shopOpen) return;
     // Ask for unit selection on produce items that support dual-mode
     if (veg.category !== "grocery" && allowPiece) {
-      onOpenChoice(veg);
+      onOpenChoice(veg, e);
     } else {
       // Direct add according to veg.unit (0.1 kg for weight items, 1 for piece/grocery)
       const initialQty = veg.unit === "kg" ? 0.1 : 1;
@@ -852,7 +852,20 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const [choiceVeg, setChoiceVeg] = useState<Vegetable | null>(null);
   const { setQty } = useOrderList();
 
-  // Scroll listener for collapsible header: hides top brand banner on scroll while keeping search bar sticky
+  const triggerRef = useRef<HTMLElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+
+  const openChoiceModal = (veg: Vegetable, e?: React.MouseEvent) => {
+    if (!shopOpen) return;
+    if (e) {
+      triggerRef.current = e.currentTarget as HTMLElement;
+    } else {
+      triggerRef.current = document.activeElement as HTMLElement;
+    }
+    setChoiceVeg(veg);
+  };
+
+  // Scroll listener for collapsible header
   useEffect(() => {
     const handleScroll = () => {
       const y = window.scrollY;
@@ -866,11 +879,70 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Shop hours — refresh every minute
+  // Auto-close modal and prevent selection if shop hours change to closed
   useEffect(() => {
-    const id = setInterval(() => setShopOpen(isWithinOrderWindow()), 60_000);
+    const updateShopStatus = () => {
+      const open = isWithinOrderWindow();
+      setShopOpen(open);
+      if (!open) {
+        setChoiceVeg(null);
+      }
+    };
+    updateShopStatus();
+    const id = setInterval(updateShopStatus, 60_000);
     return () => clearInterval(id);
   }, []);
+
+  // Modal accessibility: Focus management, focus trap, Escape key handling, and restoring focus
+  useEffect(() => {
+    if (!choiceVeg) {
+      if (triggerRef.current && typeof triggerRef.current.focus === "function") {
+        triggerRef.current.focus();
+      }
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (modalRef.current) {
+        modalRef.current.focus();
+      }
+    }, 50);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setChoiceVeg(null);
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusables = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first || document.activeElement === modalRef.current) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [choiceVeg]);
 
 
 
@@ -1282,7 +1354,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               key={veg.id}
               veg={veg}
               shopOpen={shopOpen}
-              onOpenChoice={(v) => setChoiceVeg(v)}
+              onOpenChoice={openChoiceModal}
             />
           ))
         )}
@@ -1647,6 +1719,11 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
           onClick={() => setChoiceVeg(null)}
         >
           <div
+            ref={modalRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="choice-modal-title"
             style={{
               background: "#ffffff",
               borderRadius: "24px",
@@ -1658,12 +1735,16 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               flexDirection: "column",
               gap: "16px",
               textAlign: "left",
+              outline: "none",
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827", margin: 0, fontFamily: "var(--font)" }}>
+                <h3
+                  id="choice-modal-title"
+                  style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827", margin: 0, fontFamily: "var(--font)" }}
+                >
                   {choiceVeg.name_en}
                 </h3>
                 <p style={{ fontSize: "0.85rem", color: "#6B7280", margin: "2px 0 0", fontFamily: "var(--font)" }}>
@@ -1673,6 +1754,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               <button
                 type="button"
                 onClick={() => setChoiceVeg(null)}
+                aria-label="Close unit selection"
                 style={{
                   border: "none",
                   background: "#F3F4F6",
@@ -1699,6 +1781,10 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               <button
                 type="button"
                 onClick={() => {
+                  if (!shopOpen || !choiceVeg) {
+                    setChoiceVeg(null);
+                    return;
+                  }
                   const veg = choiceVeg;
                   setChoiceVeg(null);
                   setQty(veg.id, 0.1, {
@@ -1733,6 +1819,10 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                 <button
                   type="button"
                   onClick={() => {
+                    if (!shopOpen || !choiceVeg) {
+                      setChoiceVeg(null);
+                      return;
+                    }
                     const veg = choiceVeg;
                     setChoiceVeg(null);
                     setQty(veg.id, 1, {

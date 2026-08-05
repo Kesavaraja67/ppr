@@ -1495,7 +1495,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                   நாங்கள் {config?.delivery_radius_km ?? 3} கிமீ சுற்றளவிற்குள் மட்டுமே டெலிவரி செய்கிறோம். பெரிய ஆர்டர்கள் அல்லது இதற்கு அப்பால் டெலிவரி தேவைப்பட்டால், நேரடியாக எங்களை அழைக்கவும்.
                 </p>
                 <a
-                  href={`tel:${config?.phone_number || "9443721544"}`}
+                  href={`tel:${config?.phone_number || "6382366080"}`}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -1512,7 +1512,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                     border: "1px solid #C3E6D0",
                   }}
                 >
-                  <PhoneIcon size={14} /> Call Shop: {config?.phone_number || "94437 21544"}
+                  <PhoneIcon size={14} /> Call Shop: {config?.phone_number || "63823 66080"}
                 </a>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>

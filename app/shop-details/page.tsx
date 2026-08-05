@@ -73,7 +73,7 @@ export default function ShopDetailsPage() {
 
   const shopName = config?.shop_name ?? "P.P.R. Fruits & Vegetables";
   const ownerName = config?.owner_name ?? "Jayaraman P";
-  const phone = config?.phone_number ?? "94437 21544";
+  const phone = config?.phone_number ?? "63823 66080";
   const radius = config?.delivery_radius_km ?? 3;
   const coveredAreas = config?.covered_areas?.length
     ? config.covered_areas

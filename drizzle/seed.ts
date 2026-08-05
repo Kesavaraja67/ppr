@@ -68,7 +68,7 @@ async function main() {
     await db.insert(schema.shop_config).values({
       shop_name: "PPR Fruits & Vegetables",
       owner_name: "Jayaraman P",
-      phone_number: "8870187248",
+      phone_number: "6382366080",
       // Actual shop coordinates — PPR Vegatable And Fruits, High School Road,
       // NGGO Colony, Coimbatore (confirmed via Google Maps on 2026-07-31)
       lat: "11.0915615",

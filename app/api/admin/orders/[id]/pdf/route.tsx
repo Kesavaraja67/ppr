@@ -279,7 +279,7 @@ export async function GET(
 
     const [config] = await db.select().from(shop_config).limit(1);
     const shopName = config?.shop_name ?? "P.P.R. Fruits and Vegetables";
-    const shopPhone = config?.phone_number ?? "94437 21544";
+    const shopPhone = config?.phone_number ?? "63823 66080";
 
     const pdfBuffer = await renderToBuffer(
       <BillPDFDocument shopName={shopName} shopPhone={shopPhone} order={order} items={items} />

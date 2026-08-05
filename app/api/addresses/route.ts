@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
   if (!isWithinRange) {
     return NextResponse.json(
       {
-        error: `Sorry, your location is outside our ${radiusKm}km delivery zone (${distanceKm.toFixed(1)}km away). Please call the shop at 94437 21544.`,
+        error: `Sorry, your location is outside our ${radiusKm}km delivery zone (${distanceKm.toFixed(1)}km away). Please call the shop at 63823 66080.`,
         distance_km: distanceKm,
         radius_km: radiusKm,
       },

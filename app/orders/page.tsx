@@ -54,7 +54,7 @@ function BackIcon() {
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [shopPhone, setShopPhone] = useState("94437 21544");
+  const [shopPhone, setShopPhone] = useState("63823 66080");
 
   useEffect(() => {
     fetch("/api/orders")

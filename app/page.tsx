@@ -167,7 +167,7 @@ export default async function CatalogPage() {
           : {
               shop_name: "P.P.R. Fruits & Vegetables",
               owner_name: "Jayaraman P",
-              phone_number: "8870187248",
+              phone_number: "6382366080",
               lat: 11.0915615,
               long: 76.9452854,
               delivery_radius_km: 3,

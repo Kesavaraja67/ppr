@@ -201,7 +201,7 @@ export default function ConfirmOrderPage() {
         // Immediate client-side UX feedback
         if (shopCoords && newAddressCoords && !isWithinRange()) {
           setSubmitError(
-            `Sorry, your location is outside our ${shopCoords.radius}km delivery zone. Please call the shop at 94437 21544.`
+            `Sorry, your location is outside our ${shopCoords.radius}km delivery zone. Please call the shop at 63823 66080.`
           );
           return false;
         }

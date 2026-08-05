@@ -56,7 +56,7 @@ Delivery Charge: ${delivery}
 TOTAL AMOUNT:    ₹${total}
 ================================
 Payment: Cash on Delivery
-Shop Contact: 94437 21544
+Shop Contact: 63823 66080
 Thank you for shopping!`;
 }
 

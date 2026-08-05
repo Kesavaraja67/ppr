@@ -12,12 +12,12 @@ async function compressAll() {
     if (!file.match(/\.(jpg|jpeg|png|webp)$/i)) continue;
     const filePath = path.join(dir, file);
     const stat = fs.statSync(filePath);
-    if (stat.size > 25 * 1024) {
+    if (stat.size > 15 * 1024) {
       const tempPath = filePath + '.tmp.jpg';
       
       await sharp(filePath)
-        .resize(400, 400, { fit: 'cover', position: 'center' })
-        .jpeg({ quality: 80, mozjpeg: true })
+        .resize(400, 400, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+        .jpeg({ quality: 75, mozjpeg: true })
         .toFile(tempPath);
       
       fs.unlinkSync(filePath);

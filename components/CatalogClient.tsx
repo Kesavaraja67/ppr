@@ -357,21 +357,11 @@ function KgInputBar({
           border: "1.5px solid #1A6B47",
           borderRadius: "9999px",
           height: "100%",
-          padding: "0 10px",
+          padding: "0 8px",
           overflow: "hidden",
+          minWidth: 0,
         }}
       >
-        <span
-          style={{
-            fontSize: "0.72rem",
-            fontWeight: 700,
-            color: "#166534",
-            marginRight: "4px",
-            flexShrink: 0,
-          }}
-        >
-          Qty:
-        </span>
         <input
           type="number"
           inputMode="decimal"
@@ -406,24 +396,25 @@ function KgInputBar({
             background: "transparent",
             border: "none",
             outline: "none",
-            fontSize: "0.85rem",
+            fontSize: "16px",
             fontWeight: 700,
             color: "#111827",
             fontFamily: "var(--font)",
             MozAppearance: "textfield",
             WebkitAppearance: "none",
+            padding: "0 2px",
           }}
         />
         {weightLabel && (
           <span
             style={{
               fontSize: "0.68rem",
-              fontWeight: 700,
+              fontWeight: 800,
               color: "#15803D",
               background: "#DCFCE7",
-              padding: "2px 6px",
+              padding: "3px 7px",
               borderRadius: "9999px",
-              marginLeft: "4px",
+              marginLeft: "2px",
               flexShrink: 0,
               whiteSpace: "nowrap",
             }}
@@ -520,15 +511,23 @@ function OrderListIcon({ count }: { count: number }) {
 }
 
 // ── Product Card ──────────────────────────────────────────────────────────────
-function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
+function ProductCard({
+  veg,
+  shopOpen,
+  onOpenChoice,
+}: {
+  veg: Vegetable;
+  shopOpen: boolean;
+  onOpenChoice: (veg: Vegetable) => void;
+}) {
   const { items, setQty, getQty } = useOrderList();
-  const qty = getQty(veg.id);
+  const isMounted = useIsMounted();
+  const qty = isMounted ? getQty(veg.id) : 0;
   const cartItem = items.find((i) => i.veg_id === veg.id);
   const color = CARD_COLORS[hashIndex(veg.id)];
 
   const [overrideSrc, setOverrideSrc] = useState<string | null>(null);
   const [imgError, setImgError] = useState(false);
-  const [showChoice, setShowChoice] = useState(false);
 
   // Active unit based on cart item or default vegetable unit
   const activeUnit = cartItem?.unit ?? veg.unit;
@@ -540,7 +539,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
     if (!shopOpen) return;
     // Ask for unit selection on produce items that support dual-mode
     if (veg.category !== "grocery" && allowPiece) {
-      setShowChoice(true);
+      onOpenChoice(veg);
     } else {
       // Direct add according to veg.unit (0.1 kg for weight items, 1 for piece/grocery)
       const initialQty = veg.unit === "kg" ? 0.1 : 1;
@@ -551,18 +550,6 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
         image_url: veg.image_url,
       });
     }
-  };
-
-  const handleSelectUnit = (selectedUnit: "kg" | "piece") => {
-    if (selectedUnit === "piece" && !allowPiece) return;
-    setShowChoice(false);
-    const initialQty = selectedUnit === "kg" ? 0.1 : 1;
-    setQty(veg.id, initialQty, {
-      name_en: veg.name_en,
-      name_ta: veg.name_ta,
-      unit: selectedUnit,
-      image_url: veg.image_url,
-    });
   };
 
   const handleIncrementPiece = () => {
@@ -737,77 +724,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
 
         {veg.in_stock ? (
           qty === 0 ? (
-            showChoice ? (
-              /* Inline Unit Choice Selector with Cancel button & Tamil labels */
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span
-                    style={{
-                      fontSize: "0.68rem",
-                      fontWeight: 700,
-                      color: "#374151",
-                    }}
-                  >
-                    Select Unit / அளவு தேர்வு:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowChoice(false)}
-                    aria-label="Cancel unit selection"
-                    style={{
-                      border: "none",
-                      background: "none",
-                      color: "#9CA3AF",
-                      fontSize: "0.85rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      padding: "0 4px",
-                      lineHeight: 1,
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div style={{ display: "flex", gap: "6px" }}>
-                  <button
-                    type="button"
-                    onClick={() => handleSelectUnit("kg")}
-                    style={{
-                      flex: 1,
-                      height: "36px",
-                      background: "#1A6B47",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "9999px",
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    By Weight / எடை
-                  </button>
-                  {allowPiece && (
-                    <button
-                      type="button"
-                      onClick={() => handleSelectUnit("piece")}
-                      style={{
-                        flex: 1,
-                        height: "36px",
-                        background: "#F3F4F6",
-                        color: "#1F2937",
-                        border: "1px solid #D1D5DB",
-                        borderRadius: "9999px",
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                      }}
-                    >
-                      By Piece / எண்ணிக்கை
-                    </button>
-                  )}
-                </div>
-              </div>
-            ) : (
+            <>
               <button
                 onClick={handleAddToCartClick}
                 style={{
@@ -833,7 +750,7 @@ function ProductCard({ veg, shopOpen }: { veg: Vegetable; shopOpen: boolean }) {
                 <PlusIcon />
                 Add to Cart
               </button>
-            )
+            </>
           ) : isKg ? (
             <KgInputBar
               qty={qty}
@@ -932,6 +849,8 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
 
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [choiceVeg, setChoiceVeg] = useState<Vegetable | null>(null);
+  const { setQty } = useOrderList();
 
   // Scroll listener for collapsible header: hides top brand banner on scroll while keeping search bar sticky
   useEffect(() => {
@@ -1358,7 +1277,14 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             </p>
           </div>
         ) : (
-          filtered.map((veg) => <ProductCard key={veg.id} veg={veg} shopOpen={shopOpen} />)
+          filtered.map((veg) => (
+            <ProductCard
+              key={veg.id}
+              veg={veg}
+              shopOpen={shopOpen}
+              onOpenChoice={(v) => setChoiceVeg(v)}
+            />
+          ))
         )}
       </main>
 
@@ -1699,6 +1625,145 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             >
               Got it
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Global Top-Level Unit Choice Modal ─────────────────────────────── */}
+      {choiceVeg && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            background: "rgba(0, 0, 0, 0.55)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={() => setChoiceVeg(null)}
+        >
+          <div
+            style={{
+              background: "#ffffff",
+              borderRadius: "24px",
+              width: "100%",
+              maxWidth: "340px",
+              padding: "22px 20px",
+              boxShadow: "0 20px 50px rgba(0,0,0,0.3)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              textAlign: "left",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#111827", margin: 0, fontFamily: "var(--font)" }}>
+                  {choiceVeg.name_en}
+                </h3>
+                <p style={{ fontSize: "0.85rem", color: "#6B7280", margin: "2px 0 0", fontFamily: "var(--font)" }}>
+                  {choiceVeg.name_ta}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChoiceVeg(null)}
+                style={{
+                  border: "none",
+                  background: "#F3F4F6",
+                  borderRadius: "50%",
+                  width: "32px",
+                  height: "32px",
+                  fontSize: "1rem",
+                  color: "#6B7280",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#374151", margin: 0, fontFamily: "var(--font)" }}>
+              Select Order Unit / அளவு தேர்வு செய்க:
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  const veg = choiceVeg;
+                  setChoiceVeg(null);
+                  setQty(veg.id, 0.1, {
+                    name_en: veg.name_en,
+                    name_ta: veg.name_ta,
+                    unit: "kg",
+                    image_url: veg.image_url,
+                  });
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 18px",
+                  background: "#F0FDF4",
+                  border: "2px solid #1A6B47",
+                  borderRadius: "16px",
+                  color: "#166534",
+                  fontSize: "0.92rem",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                  fontFamily: "var(--font)",
+                }}
+              >
+                <span>⚖️ By Weight / எடை</span>
+                <span style={{ fontSize: "0.72rem", background: "#DCFCE7", padding: "4px 8px", borderRadius: "9999px" }}>
+                  g / kg
+                </span>
+              </button>
+
+              {(choiceVeg.allow_piece_mode ?? true) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const veg = choiceVeg;
+                    setChoiceVeg(null);
+                    setQty(veg.id, 1, {
+                      name_en: veg.name_en,
+                      name_ta: veg.name_ta,
+                      unit: "piece",
+                      image_url: veg.image_url,
+                    });
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "14px 18px",
+                    background: "#F9FAFB",
+                    border: "1.5px solid #E5E7EB",
+                    borderRadius: "16px",
+                    color: "#1F2937",
+                    fontSize: "0.92rem",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  <span>🧩 By Piece / எண்ணிக்கை</span>
+                  <span style={{ fontSize: "0.72rem", background: "#E5E7EB", padding: "4px 8px", borderRadius: "9999px" }}>
+                    Count
+                  </span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

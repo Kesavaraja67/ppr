@@ -22,16 +22,39 @@ type WindowWithMSG91 = Window & typeof globalThis & { initSendOTP?: unknown };
  *
  * @param captchaRenderId  ID of the hidden div the widget will mount into.
  */
+export function resetMsg91Captcha(captchaRenderId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((window as any).hcaptcha && typeof (window as any).hcaptcha.reset === "function") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (window as any).hcaptcha.reset();
+    }
+    const container = document.getElementById(captchaRenderId);
+    if (container) {
+      container.innerHTML = "";
+    }
+  } catch (err) {
+    console.error("Error resetting MSG91 captcha:", err);
+  }
+}
+
 export function useMsg91Widget(captchaRenderId: string) {
-  // Lazy initialiser: if initSendOTP is already on window (e.g. hot-reload or
-  // back-navigation) mark ready immediately without waiting for an effect.
+  // Lazy initialiser: if sendOtp or initSendOTP is already on window
   const [ready, setReady] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
-    return typeof (window as WindowWithMSG91).initSendOTP === "function";
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return typeof (window as any).sendOtp === "function" || typeof (window as WindowWithMSG91).initSendOTP === "function";
   });
 
   useEffect(() => {
-    // Build configuration once and reuse it for both init paths.
+    // If window.sendOtp is already initialized, do not re-initialize initSendOTP
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (typeof (window as any).sendOtp === "function") {
+      return;
+    }
+
+    // Build configuration once
     const configuration = {
       widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
       tokenAuth: process.env.NEXT_PUBLIC_MSG91_TOKEN_AUTH,
@@ -41,10 +64,8 @@ export function useMsg91Widget(captchaRenderId: string) {
       failure: (err: unknown) => console.error("MSG91 widget error:", err),
     };
 
-    // Already initialised (lazy init above handled it) — just re-call initSendOTP
-    // with this captchaRenderId to bind it. ready is already true from the lazy
-    // initializer so no setState needed here (avoids react-hooks/set-state-in-effect).
     if (typeof (window as WindowWithMSG91).initSendOTP === "function") {
+      resetMsg91Captcha(captchaRenderId);
       // @ts-expect-error global exposed by the MSG91 otp-provider script
       window.initSendOTP(configuration);
       return;

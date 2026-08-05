@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { useMsg91Ready } from "@/components/Msg91WidgetProvider";
+import { useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 
 /** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
@@ -338,7 +339,8 @@ export default function ConfirmOrderPage() {
     let timedOut = false;
     const sendTimer = setTimeout(() => {
       timedOut = true;
-      setOtpError("OTP request timed out. Please check your connection and try again.");
+      resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
+      setOtpError("OTP request timed out. Please check your connection or Captcha and try again.");
       setOtpLoading(false);
     }, OTP_TIMEOUT_MS);
 
@@ -355,6 +357,7 @@ export default function ConfirmOrderPage() {
       (err: unknown) => {
         if (timedOut) return;
         clearTimeout(sendTimer);
+        resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
         setOtpError("Failed to send OTP. Please try again.");
         setOtpLoading(false);
         console.error(err);

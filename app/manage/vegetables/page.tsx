@@ -237,6 +237,182 @@ export default function AdminVegetablesPage() {
   const activeItems = vegetables.filter((v) => v.in_stock);
   const removedItems = vegetables.filter((v) => !v.in_stock);
   const displayedItems = activeTab === "active" ? activeItems : removedItems;
+  const sortedItems = [...displayedItems].sort((a, b) => a.name_en.localeCompare(b.name_en));
+
+  const renderItemForm = (isEdit: boolean) => (
+    <div
+      style={{
+        background: isEdit ? "#eff6ff" : "#f0fdf4",
+        border: `1.5px solid ${isEdit ? "#bfdbfe" : "#bbf7d0"}`,
+        borderRadius: "12px",
+        padding: "16px",
+        marginBottom: isEdit ? "12px" : "20px",
+        boxShadow: isEdit ? "0 4px 16px rgba(30, 64, 175, 0.1)" : "none",
+      }}
+    >
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "14px", color: isEdit ? "#1e40af" : "#166534" }}>
+        {isEdit ? `Edit "${editingVeg?.name_en}"` : "Add New Item"}
+      </h2>
+
+      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+            Name (English) *
+          </label>
+          <input
+            className="admin-input"
+            placeholder="e.g. Tomato"
+            value={nameEn}
+            onChange={(e) => setNameEn(e.target.value)}
+          />
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+            Name (Tamil) {nameTaLoading ? "..." : ""}
+          </label>
+          <input
+            className="admin-input"
+            placeholder="தக்காளி"
+            value={nameTa}
+            onChange={(e) => setNameTa(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+            Unit *
+          </label>
+          <select
+            className="admin-input"
+            value={unit}
+            onChange={(e) => setUnit(e.target.value)}
+          >
+            {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1 }}>
+          <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+            Category *
+          </label>
+          <select
+            className="admin-input"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+          >
+            {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {/* Optional Reference Price */}
+      <div style={{ marginBottom: "12px" }}>
+        <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "2px" }}>
+          Price (₹) per {unit} — leave blank if you haven&apos;t decided yet
+        </label>
+        <p style={{ fontSize: "0.72rem", color: "#6b7280", marginBottom: "6px" }}>
+          Optional reference price shown to customers. If left empty, customers will see &quot;Price will be updated soon&quot;.
+        </p>
+        <input
+          className="admin-input"
+          type="number"
+          step="any"
+          min="0"
+          placeholder={`e.g. 40 (for ₹40/${unit})`}
+          value={currentPrice}
+          onChange={(e) => setCurrentPrice(e.target.value)}
+        />
+      </div>
+
+      {/* Dual ordering mode checkbox */}
+      <div style={{ marginBottom: "12px" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 600, color: "#374151", cursor: "pointer" }}>
+          <input
+            type="checkbox"
+            checked={allowPieceMode}
+            onChange={(e) => setAllowPieceMode(e.target.checked)}
+            style={{ width: "16px", height: "16px", accentColor: "#166534" }}
+          />
+          Also allow ordering by piece (Weight / Piece mode toggle for customers)
+        </label>
+      </div>
+
+      {/* Photo upload */}
+      <div style={{ marginBottom: "14px" }}>
+        <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
+          Photo (optional)
+        </label>
+        {imageData ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageData} alt="Preview" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px" }} />
+            <button onClick={() => setImageData(null)} style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
+              Remove photo
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileRef.current?.click()}
+            style={{
+              padding: "10px 18px",
+              border: `1.5px dashed ${isEdit ? "#bfdbfe" : "#bbf7d0"}`,
+              borderRadius: "9999px",
+              background: "#fff",
+              color: isEdit ? "#1e40af" : "#166534",
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+            }}
+          >
+            <CameraIcon /> Choose Photo
+          </button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleImageChange}
+          style={{ display: "none" }}
+        />
+      </div>
+
+      <div style={{ display: "flex", gap: "10px" }}>
+        <button
+          className="btn-accent"
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            background: isEdit ? "#1e40af" : "#166534",
+          }}
+        >
+          {saving ? "Saving…" : isEdit ? "Save Changes" : "Save Item"}
+        </button>
+        <button
+          onClick={resetForm}
+          style={{
+            flex: 1,
+            padding: "14px",
+            border: "1.5px solid #e5e7eb",
+            borderRadius: "9999px",
+            background: "#fff",
+            cursor: "pointer",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+            color: "#6b7280",
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="page-content" style={{ padding: "16px" }}>
@@ -301,183 +477,11 @@ export default function AdminVegetablesPage() {
         </button>
       </div>
 
-      {/* Add / Edit Form */}
-      {(showAdd || editingVeg) && (
-        <div
-          style={{
-            background: editingVeg ? "#eff6ff" : "#f0fdf4",
-            border: `1.5px solid ${editingVeg ? "#bfdbfe" : "#bbf7d0"}`,
-            borderRadius: "12px",
-            padding: "16px",
-            marginBottom: "20px",
-          }}
-        >
-          <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: "14px", color: editingVeg ? "#1e40af" : "#166534" }}>
-            {editingVeg ? `Edit "${editingVeg.name_en}"` : "Add New Item"}
-          </h2>
-
-          <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-                Name (English) *
-              </label>
-              <input
-                className="admin-input"
-                placeholder="e.g. Tomato"
-                value={nameEn}
-                onChange={(e) => setNameEn(e.target.value)}
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-                Name (Tamil) {nameTaLoading ? "..." : ""}
-              </label>
-              <input
-                className="admin-input"
-                placeholder="தக்காளி"
-                value={nameTa}
-                onChange={(e) => setNameTa(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-                Unit *
-              </label>
-              <select
-                className="admin-input"
-                value={unit}
-                onChange={(e) => setUnit(e.target.value)}
-              >
-                {UNITS.map((u) => <option key={u} value={u}>{u}</option>)}
-              </select>
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-                Category *
-              </label>
-              <select
-                className="admin-input"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </select>
-            </div>
-          </div>
-
-          {/* Optional Reference Price */}
-          <div style={{ marginBottom: "12px" }}>
-            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "2px" }}>
-              Price (₹) per {unit} — leave blank if you haven&apos;t decided yet
-            </label>
-            <p style={{ fontSize: "0.72rem", color: "#6b7280", marginBottom: "6px" }}>
-              Optional reference price shown to customers. If left empty, customers will see &quot;Price will be updated soon&quot;.
-            </p>
-            <input
-              className="admin-input"
-              type="number"
-              step="any"
-              min="0"
-              placeholder={`e.g. 40 (for ₹40/${unit})`}
-              value={currentPrice}
-              onChange={(e) => setCurrentPrice(e.target.value)}
-            />
-          </div>
-
-          {/* Dual ordering mode checkbox */}
-          <div style={{ marginBottom: "12px" }}>
-            <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 600, color: "#374151", cursor: "pointer" }}>
-              <input
-                type="checkbox"
-                checked={allowPieceMode}
-                onChange={(e) => setAllowPieceMode(e.target.checked)}
-                style={{ width: "16px", height: "16px", accentColor: "#166534" }}
-              />
-              Also allow ordering by piece (Weight / Piece mode toggle for customers)
-            </label>
-          </div>
-
-          {/* Photo upload */}
-          <div style={{ marginBottom: "14px" }}>
-            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-              Photo (optional)
-            </label>
-            {imageData ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageData} alt="Preview" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px" }} />
-                <button onClick={() => setImageData(null)} style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
-                  Remove photo
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => fileRef.current?.click()}
-                style={{
-                  padding: "10px 18px",
-                  border: "1.5px dashed #bbf7d0",
-                  borderRadius: "9999px",
-                  background: "#fff",
-                  color: "#166534",
-                  cursor: "pointer",
-                  fontSize: "0.85rem",
-                  fontWeight: 600,
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <CameraIcon /> Choose Photo
-              </button>
-            )}
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleImageChange}
-              style={{ display: "none" }}
-            />
-          </div>
-
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              className="btn-accent"
-              onClick={handleSave}
-              disabled={saving}
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                background: editingVeg ? "#1e40af" : "#166534",
-              }}
-            >
-              {saving ? "Saving…" : editingVeg ? "Save Changes" : "Save Item"}
-            </button>
-            <button
-              onClick={resetForm}
-              style={{
-                flex: 1,
-                padding: "14px",
-                border: "1.5px solid #e5e7eb",
-                borderRadius: "9999px",
-                background: "#fff",
-                cursor: "pointer",
-                fontSize: "0.9rem",
-                fontWeight: 600,
-                color: "#6b7280",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
+      {/* Top Form (only shown for Add New) */}
+      {showAdd && !editingVeg && renderItemForm(false)}
 
       {/* Items list */}
-      {displayedItems.length === 0 ? (
+      {sortedItems.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 16px", color: "#9ca3af", fontSize: "0.9rem" }}>
           {activeTab === "active"
             ? "No active items in catalog."
@@ -485,104 +489,67 @@ export default function AdminVegetablesPage() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {displayedItems.map((veg) => (
-            <div
-              key={veg.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "12px",
-                padding: "12px 14px",
-                background: "#fff",
-                borderRadius: "12px",
-                border: "1px solid #e5e7eb",
-              }}
-            >
-              {veg.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={veg.image_url}
-                  alt={veg.name_en}
-                  style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: "44px",
-                    height: "44px",
-                    background: "#f0f7f2",
-                    borderRadius: "8px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >
-                  <LeafIcon color="#166534" />
-                </div>
-              )}
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 700, fontSize: "0.92rem" }}>{veg.name_en}</p>
-                <p style={{ color: "#9ca3af", fontSize: "0.76rem", marginTop: "2px" }}>
-                  {veg.name_ta} · {veg.unit} · {veg.category}
-                </p>
+          {sortedItems.map((veg) =>
+            editingVeg?.id === veg.id ? (
+              <div key={veg.id}>
+                {renderItemForm(true)}
               </div>
-
-              {/* Action buttons */}
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-                {/* Edit Button */}
-                <button
-                  onClick={() => startEdit(veg)}
-                  title="Edit item details"
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: "9999px",
-                    border: "1.5px solid #d1d5db",
-                    background: "#f9fafb",
-                    color: "#374151",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <EditIcon /> Edit
-                </button>
-
-                {/* Remove or Restore Button */}
-                {veg.in_stock ? (
-                  <button
-                    onClick={() => setItemStock(veg, false)}
-                    title="Remove item from catalog (moves to Archive)"
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "9999px",
-                      border: "1.5px solid #fecaca",
-                      background: "#fef2f2",
-                      color: "#dc2626",
-                      fontSize: "0.75rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    <TrashIcon /> Remove
-                  </button>
+            ) : (
+              <div
+                key={veg.id}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "12px",
+                  padding: "12px 14px",
+                  background: "#fff",
+                  borderRadius: "12px",
+                  border: "1px solid #e5e7eb",
+                }}
+              >
+                {veg.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={veg.image_url}
+                    alt={veg.name_en}
+                    style={{ width: "44px", height: "44px", objectFit: "cover", borderRadius: "8px", flexShrink: 0 }}
+                  />
                 ) : (
+                  <div
+                    style={{
+                      width: "44px",
+                      height: "44px",
+                      background: "#f0f7f2",
+                      borderRadius: "8px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <LeafIcon color="#166534" />
+                  </div>
+                )}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 700, fontSize: "0.92rem" }}>{veg.name_en}</p>
+                  <p style={{ color: "#9ca3af", fontSize: "0.76rem", marginTop: "2px" }}>
+                    {veg.name_ta} · {veg.unit} · {veg.category}
+                  </p>
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+                  {/* Edit Button */}
                   <button
-                    onClick={() => setItemStock(veg, true)}
-                    title="Restore item back to Active catalog"
+                    onClick={() => startEdit(veg)}
+                    title="Edit item details"
                     style={{
                       padding: "6px 12px",
                       borderRadius: "9999px",
-                      border: "1.5px solid #bbf7d0",
-                      background: "#f0fdf4",
-                      color: "#166534",
+                      border: "1.5px solid #d1d5db",
+                      background: "#f9fafb",
+                      color: "#374151",
                       fontSize: "0.75rem",
                       fontWeight: 700,
                       cursor: "pointer",
@@ -591,12 +558,55 @@ export default function AdminVegetablesPage() {
                       gap: "4px",
                     }}
                   >
-                    <RestoreIcon /> Restore
+                    <EditIcon /> Edit
                   </button>
-                )}
+
+                  {/* Remove or Restore Button */}
+                  {veg.in_stock ? (
+                    <button
+                      onClick={() => setItemStock(veg, false)}
+                      title="Remove item from catalog (moves to Archive)"
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "9999px",
+                        border: "1.5px solid #fecaca",
+                        background: "#fef2f2",
+                        color: "#dc2626",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <TrashIcon /> Remove
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setItemStock(veg, true)}
+                      title="Restore item back to Active catalog"
+                      style={{
+                        padding: "6px 12px",
+                        borderRadius: "9999px",
+                        border: "1.5px solid #bbf7d0",
+                        background: "#f0fdf4",
+                        color: "#166534",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <RestoreIcon /> Restore
+                    </button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          )}
         </div>
       )}
     </div>

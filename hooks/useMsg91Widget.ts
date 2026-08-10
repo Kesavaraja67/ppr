@@ -33,7 +33,11 @@ export function resetMsg91Captcha(captchaRenderId: string) {
 }
 
 export function useMsg91Widget(captchaRenderId: string) {
-  const [ready, setReady] = useState<boolean>(false);
+  const [ready, setReady] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return typeof (window as any).sendOtp === "function";
+  });
   const [widgetError, setWidgetError] = useState<string | null>(null);
   const initialized = useRef(false);
 
@@ -66,8 +70,16 @@ export function useMsg91Widget(captchaRenderId: string) {
       }
     };
 
-    // If script already loaded, initialize or mark ready
+    // If script already loaded, check if sendOtp is already bound to avoid duplicate init
     if (typeof (window as WindowWithMSG91).initSendOTP === "function") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if (typeof (window as any).sendOtp === "function") {
+        queueMicrotask(() => {
+          setReady(true);
+          setWidgetError(null);
+        });
+        return;
+      }
       runInit();
       return;
     }

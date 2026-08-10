@@ -30,21 +30,63 @@ function LoginForm() {
   const otpInputRef = useRef<HTMLInputElement>(null);
   const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
-  const { ready: widgetReady } = useMsg91Ready();
+  const { ready: widgetReady, widgetError } = useMsg91Ready();
   const { captchaReady, captchaError } = useCaptchaReady(widgetReady);
 
-  const activeError = error || captchaError || "";
+  const activeError = error || captchaError || widgetError || "";
 
   const handleSendOtp = (isResend = false) => {
-    if (loading || isVerifying() || !captchaReady) return;
+    if (loading || isVerifying()) return;
+    if (!isResend && !captchaReady) return;
     resetVerification();
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
     }
+    if (widgetError) {
+      setError(widgetError);
+      return;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!widgetReady || typeof (window as any).sendOtp !== "function") {
+    const win = window as any;
+
+    // Use MSG91 retryOtp API for resend requests without re-triggering captcha
+    if (isResend && typeof win.retryOtp === "function") {
+      setError("");
+      setLoading(true);
+      let timedOut = false;
+      const retryTimer = setTimeout(() => {
+        timedOut = true;
+        setError("Resend request timed out. Please try again.");
+        setLoading(false);
+      }, OTP_TIMEOUT_MS);
+
+      const handleSuccess = () => {
+        if (timedOut) return;
+        clearTimeout(retryTimer);
+        setLoading(false);
+        setResendCountdown(RESEND_COOLDOWN_S);
+      };
+
+      const handleFail = (err: unknown) => {
+        if (timedOut) return;
+        clearTimeout(retryTimer);
+        setError("Failed to resend OTP. Please try again.");
+        setLoading(false);
+        console.error("retryOtp failed:", err);
+      };
+
+      try {
+        win.retryOtp(handleSuccess, handleFail);
+      } catch {
+        win.sendOtp(`91${cleaned}`, handleSuccess, handleFail);
+      }
+      return;
+    }
+
+    if (!widgetReady || typeof win.sendOtp !== "function") {
       setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
@@ -60,8 +102,7 @@ function LoginForm() {
       setLoading(false);
     }, OTP_TIMEOUT_MS);
 
-    // @ts-expect-error exposed by the MSG91 widget script
-    window.sendOtp(
+    win.sendOtp(
       `91${cleaned}`,
       () => {
         if (timedOut) return;

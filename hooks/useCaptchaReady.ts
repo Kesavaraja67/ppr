@@ -2,15 +2,15 @@
 
 import { useState, useEffect } from "react";
 
-/** ms before giving up on grecaptcha and assuming captcha is ready (invisible mode) */
-const CAPTCHA_GRACE_MS = 3_000;
 /** ms before declaring captcha system broken and surfacing an error */
 const CAPTCHA_STUCK_MS = 10_000;
-/** Poll interval when watching for window.grecaptcha to appear */
+/** Poll interval when watching for captcha provider script / signal to appear */
 const POLL_INTERVAL_MS = 200;
 
-type GrecaptchaWindow = Window & {
+type CaptchaWindow = Window & {
   grecaptcha?: { ready: (cb: () => void) => void };
+  hcaptcha?: unknown;
+  sendOtp?: unknown;
 };
 
 export interface CaptchaReadyState {
@@ -19,26 +19,24 @@ export interface CaptchaReadyState {
 }
 
 /**
- * Signals when the underlying reCAPTCHA/hCaptcha system used by MSG91 is ready
+ * Signals when the underlying reCAPTCHA/hCaptcha/MSG91 system is ready
  * to process sendOtp() calls — preventing the "first click fails" race.
  *
  * Strategy:
  *  1. Wait until MSG91's script is loaded (widgetReady must be true first).
- *  2. Try window.grecaptcha.ready() — fires when Google reCAPTCHA has fully loaded.
- *  3. If grecaptcha never appears within CAPTCHA_GRACE_MS, assume MSG91 is running
- *     in invisible/no-challenge mode and declare ready anyway.
- *  4. If nothing resolves within CAPTCHA_STUCK_MS, surface a clear error so the
- *     user sees a message rather than a permanently disabled button.
- *
- * @param widgetReady true once MSG91's otp-provider.js script has loaded and
- *                    initSendOTP has been called (from useMsg91Widget / Msg91WidgetProvider).
+ *  2. Check for verified provider signals:
+ *     - window.grecaptcha.ready() callback
+ *     - window.hcaptcha presence
+ *     - window.sendOtp function registered by MSG91 SDK
+ *  3. Only mark ready when a verified signal is detected.
+ *  4. If no signal arrives within CAPTCHA_STUCK_MS, surface a clear error.
+ *     Timeout expiration NEVER marks CAPTCHA ready by itself.
  */
 export function useCaptchaReady(widgetReady: boolean): CaptchaReadyState {
   const [captchaReady, setCaptchaReady] = useState(false);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Don't start until the MSG91 widget script itself is loaded.
     if (!widgetReady) return;
 
     let settled = false;
@@ -51,6 +49,7 @@ export function useCaptchaReady(widgetReady: boolean): CaptchaReadyState {
       if (pollInterval) clearInterval(pollInterval);
       if (stuckTimer) clearTimeout(stuckTimer);
       setCaptchaReady(true);
+      setCaptchaError(null);
     };
 
     const failStuck = () => {
@@ -62,42 +61,36 @@ export function useCaptchaReady(widgetReady: boolean): CaptchaReadyState {
       );
     };
 
-    // Stuck-captcha guard — never leave the button permanently disabled.
+    // Stuck-captcha guard — surface error if no verified provider signal arrives
     stuckTimer = setTimeout(failStuck, CAPTCHA_STUCK_MS);
 
-    const tryGrecaptcha = (): boolean => {
-      const win = window as GrecaptchaWindow;
+    const checkProviderReady = (): boolean => {
+      const win = window as CaptchaWindow;
+      // Signal 1: Google reCAPTCHA ready callback
       if (win.grecaptcha && typeof win.grecaptcha.ready === "function") {
         win.grecaptcha.ready(settle);
+        return true;
+      }
+      // Signal 2: hCaptcha global object or MSG91 sendOtp method loaded
+      if (win.hcaptcha || typeof win.sendOtp === "function") {
+        settle();
         return true;
       }
       return false;
     };
 
-    // Fast-path: grecaptcha already loaded (e.g. second visit, script cached).
-    if (tryGrecaptcha()) {
+    // Fast-path: provider already ready
+    if (checkProviderReady()) {
       return () => {
         if (stuckTimer) clearTimeout(stuckTimer);
       };
     }
 
-    // Slow-path: poll until grecaptcha appears or grace period elapses.
-    let elapsed = 0;
+    // Slow-path: poll until provider signal is verified
     pollInterval = setInterval(() => {
-      elapsed += POLL_INTERVAL_MS;
-
-      if (tryGrecaptcha()) {
-        // grecaptcha found — settle via its ready callback (clears interval inside settle).
-        clearInterval(pollInterval!);
+      if (checkProviderReady()) {
+        if (pollInterval) clearInterval(pollInterval);
         pollInterval = null;
-        return;
-      }
-
-      if (elapsed >= CAPTCHA_GRACE_MS) {
-        // Grace period elapsed — MSG91 is likely in invisible/no-challenge mode.
-        clearInterval(pollInterval!);
-        pollInterval = null;
-        settle();
       }
     }, POLL_INTERVAL_MS);
 

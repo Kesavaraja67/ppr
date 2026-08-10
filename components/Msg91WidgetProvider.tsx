@@ -5,19 +5,21 @@ import { useMsg91Widget } from "@/hooks/useMsg91Widget";
 
 interface Msg91WidgetContextValue {
   ready: boolean;
+  widgetError: string | null;
 }
 
 const Msg91WidgetContext = createContext<Msg91WidgetContextValue>({
   ready: false,
+  widgetError: null,
 });
 
 export const GLOBAL_CAPTCHA_RENDER_ID = "msg91-captcha-global";
 
 export function Msg91WidgetProvider({ children }: { children: React.ReactNode }) {
-  const { ready } = useMsg91Widget(GLOBAL_CAPTCHA_RENDER_ID);
+  const { ready, widgetError } = useMsg91Widget(GLOBAL_CAPTCHA_RENDER_ID);
 
   return (
-    <Msg91WidgetContext.Provider value={{ ready }}>
+    <Msg91WidgetContext.Provider value={{ ready, widgetError }}>
       {children}
     </Msg91WidgetContext.Provider>
   );

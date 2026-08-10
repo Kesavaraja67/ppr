@@ -729,7 +729,7 @@ function ProductCard({
             <p style={{ margin: 0, fontSize: "0.86rem", fontWeight: 700, color: "#166534", fontFamily: "var(--font)" }}>
               ₹{Number(veg.current_price).toFixed(0)}{" "}
               <span style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--text-muted)" }}>
-                / {activeUnit}
+                / {veg.unit}
               </span>
             </p>
           ) : (

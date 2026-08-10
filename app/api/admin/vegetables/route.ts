@@ -73,9 +73,17 @@ export async function POST(req: NextRequest) {
     lookupTamilName(body.name_en) ||
     body.name_en; // fallback: use English name if dictionary misses it
 
+  // Price-validity rule: null means unpriced; otherwise must be finite and non-negative (>= 0)
+  if (body.current_price !== undefined && body.current_price !== null && body.current_price !== "") {
+    const num = Number(body.current_price);
+    if (!Number.isFinite(num) || num < 0) {
+      return NextResponse.json({ error: "Invalid non-negative number for current_price" }, { status: 400 });
+    }
+  }
+
   const priceVal =
     body.current_price !== undefined && body.current_price !== null && body.current_price !== ""
-      ? String(body.current_price)
+      ? String(Number(body.current_price))
       : null;
 
   const [newVeg] = await db
@@ -139,12 +147,18 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Image payload too large (max 500KB)" }, { status: 400 });
   }
 
-  const patchPrice =
-    body.current_price !== undefined
-      ? body.current_price !== null && body.current_price !== ""
-        ? String(body.current_price)
-        : null
-      : undefined;
+  let patchPrice: string | null | undefined = undefined;
+  if (body.current_price !== undefined) {
+    if (body.current_price !== null && body.current_price !== "") {
+      const num = Number(body.current_price);
+      if (!Number.isFinite(num) || num < 0) {
+        return NextResponse.json({ error: "Invalid non-negative number for current_price" }, { status: 400 });
+      }
+      patchPrice = String(num);
+    } else {
+      patchPrice = null;
+    }
+  }
 
   await db
     .update(vegetables)

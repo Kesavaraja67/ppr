@@ -126,6 +126,8 @@ function ConfirmOrderContent() {
     return h >= 8 && h < 20;
   }
 
+  const [freshPrices, setFreshPrices] = useState<Map<string, string | null>>(new Map());
+
   // Load shop config for distance check + delivery thresholds
   useEffect(() => {
     fetch("/api/shop-config")
@@ -149,20 +151,47 @@ function ConfirmOrderContent() {
         }
       })
       .catch(() => { });
+
+    // Fetch fresh vegetable catalog prices for revalidating minimum order
+    fetch("/api/admin/vegetables-list")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.vegetables)) {
+          const map = new Map<string, string | null>();
+          d.vegetables.forEach((v: { id: string; current_price?: string | null }) => {
+            map.set(v.id, v.current_price ?? null);
+          });
+          setFreshPrices(map);
+        }
+      })
+      .catch(() => { });
   }, []);
 
-  // Minimum Order Estimation & Enforcement (R3)
+  // Minimum Order Estimation & Enforcement with exact decimal / integer cents precision (R3)
   const minOrderAmount = deliveryInfo?.minOrderAmount ?? 500;
-  const pricedItems = items.filter(
-    (i) => i.current_price !== undefined && i.current_price !== null && i.current_price !== "" && Number(i.current_price) > 0
-  );
-  const estimatedSubtotal = pricedItems.reduce(
-    (sum, i) => sum + Number(i.current_price) * i.qty,
-    0
-  );
+  const minOrderCents = Math.round(minOrderAmount * 100);
+
+  const pricedItems = items.filter((i) => {
+    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
+    return (
+      priceStr !== undefined &&
+      priceStr !== null &&
+      priceStr !== "" &&
+      Number.isFinite(Number(priceStr)) &&
+      Number(priceStr) >= 0
+    );
+  });
+
+  const subtotalCents = pricedItems.reduce((sum, i) => {
+    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
+    const priceCents = Math.round(Number(priceStr) * 100);
+    return sum + priceCents * i.qty;
+  }, 0);
+
+  const estimatedSubtotal = subtotalCents / 100;
   const allItemsPriced = items.length > 0 && pricedItems.length === items.length;
-  const isMinOrderMet = estimatedSubtotal >= minOrderAmount;
-  const minOrderGap = minOrderAmount - estimatedSubtotal;
+  const isMinOrderMet = subtotalCents >= minOrderCents;
+  const minOrderGap = Math.max(0, (minOrderCents - subtotalCents) / 100);
   const isMinOrderBlocked = allItemsPriced && !isMinOrderMet;
 
   // Auth check on mount
@@ -912,12 +941,6 @@ function ConfirmOrderContent() {
                 <CloseIcon />
               </button>
             </div>
-
-            {otpError && (
-              <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: "12px", fontSize: "0.82rem", fontWeight: 600, marginBottom: "14px" }}>
-                {otpError}
-              </div>
-            )}
 
             {onboardingStep === "details" ? (
               <div>

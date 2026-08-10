@@ -120,15 +120,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (dbVeg.current_price !== null && dbVeg.current_price !== undefined && dbVeg.current_price !== "" && Number(dbVeg.current_price) > 0) {
-      pricedSubtotal += Number(dbVeg.current_price) * item.qty;
+    if (
+      dbVeg.current_price !== null &&
+      dbVeg.current_price !== undefined &&
+      dbVeg.current_price !== "" &&
+      Number.isFinite(Number(dbVeg.current_price)) &&
+      Number(dbVeg.current_price) >= 0
+    ) {
+      pricedSubtotal += Math.round(Number(dbVeg.current_price) * 100) * item.qty;
     } else {
       allItemsHavePrices = false;
     }
   }
 
+  const pricedSubtotalAmount = pricedSubtotal / 100;
+
   // Hard-block server-side ONLY when all items are priced and estimated subtotal < minOrderVal
-  if (allItemsHavePrices && pricedSubtotal < minOrderVal) {
+  if (allItemsHavePrices && pricedSubtotalAmount < minOrderVal) {
     return NextResponse.json(
       { error: `Minimum order value of ₹${minOrderVal} is required. Please add more items to your order.` },
       { status: 422 }

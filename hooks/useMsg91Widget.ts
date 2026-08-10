@@ -7,20 +7,7 @@ const WIDGET_SCRIPT_SRC = "https://verify.msg91.com/otp-provider.js";
 type WindowWithMSG91 = Window & typeof globalThis & { initSendOTP?: unknown };
 
 /**
- * Loads the MSG91 OTP Widget script once and tracks readiness.
- *
- * Usage:
- *   const { ready } = useMsg91Widget("msg91-captcha");
- *
- * The hook appends the otp-provider.js script to the document body and calls
- * window.initSendOTP with the provided captchaRenderId. `ready` becomes true
- * once initSendOTP has been called. On unmount the hook does NOT remove the
- * script — the widget registers global state that must persist across renders.
- *
- * Handles React Strict Mode (double-invoke) by detecting an already-pending
- * script element and awaiting its onload instead of appending a second one.
- *
- * @param captchaRenderId  ID of the hidden div the widget will mount into.
+ * Reset MSG91 captcha DOM elements and hcaptcha instance if present.
  */
 export function resetMsg91Captcha(captchaRenderId: string) {
   if (typeof window === "undefined") return;
@@ -47,6 +34,7 @@ export function resetMsg91Captcha(captchaRenderId: string) {
 
 export function useMsg91Widget(captchaRenderId: string) {
   const [ready, setReady] = useState<boolean>(false);
+  const [widgetError, setWidgetError] = useState<string | null>(null);
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -60,7 +48,10 @@ export function useMsg91Widget(captchaRenderId: string) {
       exposeMethods: true,
       captchaRenderId,
       success: () => { },
-      failure: (err: unknown) => console.error("MSG91 widget error:", err),
+      failure: (err: unknown) => {
+        console.error("MSG91 widget error:", err);
+        setWidgetError("Failed to initialize OTP service. Please refresh.");
+      },
     };
 
     const runInit = () => {
@@ -68,12 +59,14 @@ export function useMsg91Widget(captchaRenderId: string) {
         // @ts-expect-error global exposed by the MSG91 otp-provider script
         window.initSendOTP(configuration);
         setReady(true);
+        setWidgetError(null);
       } catch (err) {
-        console.warn("MSG91 initSendOTP safely caught:", err);
+        console.warn("MSG91 initSendOTP caught error:", err);
+        setWidgetError("Failed to start OTP service. Please refresh and try again.");
       }
     };
 
-    // If script already loaded, re-initialize immediately
+    // If script already loaded, initialize or mark ready
     if (typeof (window as WindowWithMSG91).initSendOTP === "function") {
       runInit();
       return;
@@ -94,6 +87,9 @@ export function useMsg91Widget(captchaRenderId: string) {
         if (typeof prev === "function") prev.call(existing, ev);
         runInit();
       };
+      existing.onerror = () => {
+        setWidgetError("Failed to load OTP service script.");
+      };
       return;
     }
 
@@ -104,8 +100,11 @@ export function useMsg91Widget(captchaRenderId: string) {
     script.onload = () => {
       runInit();
     };
+    script.onerror = () => {
+      setWidgetError("Failed to load OTP service script.");
+    };
     document.body.appendChild(script);
   }, [captchaRenderId]);
 
-  return { ready };
+  return { ready, widgetError };
 }

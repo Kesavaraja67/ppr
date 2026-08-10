@@ -9,6 +9,7 @@ interface Vegetable {
   unit: string;
   category: string;
   allow_piece_mode?: boolean;
+  current_price?: string | null;
   in_stock: boolean;
   image_url: string | null;
 }
@@ -98,6 +99,7 @@ export default function AdminVegetablesPage() {
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("vegetable");
   const [allowPieceMode, setAllowPieceMode] = useState(true);
+  const [currentPrice, setCurrentPrice] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -138,6 +140,7 @@ export default function AdminVegetablesPage() {
     setUnit(veg.unit);
     setCategory(veg.category);
     setAllowPieceMode(veg.allow_piece_mode ?? true);
+    setCurrentPrice(veg.current_price ?? "");
     setImageData(veg.image_url);
     setShowAdd(false);
   };
@@ -148,6 +151,7 @@ export default function AdminVegetablesPage() {
     setUnit("kg");
     setCategory("vegetable");
     setAllowPieceMode(true);
+    setCurrentPrice("");
     setImageData(null);
     setShowAdd(false);
     setEditingVeg(null);
@@ -156,6 +160,8 @@ export default function AdminVegetablesPage() {
   const handleSave = async () => {
     if (!nameEn.trim() || !unit || !category) return;
     setSaving(true);
+
+    const pricePayload = currentPrice.trim() !== "" ? currentPrice.trim() : null;
 
     if (editingVeg) {
       // UPDATE existing item
@@ -169,6 +175,7 @@ export default function AdminVegetablesPage() {
           unit,
           category,
           allow_piece_mode: allowPieceMode,
+          current_price: pricePayload,
           image_data_url: imageData ?? undefined,
         }),
       });
@@ -194,6 +201,7 @@ export default function AdminVegetablesPage() {
           unit,
           category,
           allow_piece_mode: allowPieceMode,
+          current_price: pricePayload,
           image_data_url: imageData ?? undefined,
         }),
       });
@@ -358,6 +366,25 @@ export default function AdminVegetablesPage() {
                 {CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* Optional Reference Price */}
+          <div style={{ marginBottom: "12px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "2px" }}>
+              Price (₹) per {unit} — leave blank if you haven&apos;t decided yet
+            </label>
+            <p style={{ fontSize: "0.72rem", color: "#6b7280", marginBottom: "6px" }}>
+              Optional reference price shown to customers. If left empty, customers will see &quot;Price will be updated soon&quot;.
+            </p>
+            <input
+              className="admin-input"
+              type="number"
+              step="any"
+              min="0"
+              placeholder={`e.g. 40 (for ₹40/${unit})`}
+              value={currentPrice}
+              onChange={(e) => setCurrentPrice(e.target.value)}
+            />
           </div>
 
           {/* Dual ordering mode checkbox */}

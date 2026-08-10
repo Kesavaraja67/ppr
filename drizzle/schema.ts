@@ -27,8 +27,8 @@ export const vegetables = pgTable("vegetables", {
   unit: text("unit").notNull(), // 'kg' | 'bunch' | 'piece' | 'dozen' | 'g'
   category: text("category").notNull().default("vegetable"), // 'vegetable' | 'fruit' | 'leafy' | 'grocery'
   allow_piece_mode: boolean("allow_piece_mode").notNull().default(true),
-  // Price fields kept in schema but NOT displayed on public catalog
-  current_price: numeric("current_price").notNull().default("0"),
+  // Reference price per unit — nullable if owner hasn't set reference price yet
+  current_price: numeric("current_price"),
   original_price: numeric("original_price"),
   // in_stock kept but no longer surfaced as daily action — treat all listed items as orderable
   in_stock: boolean("in_stock").notNull().default(true),
@@ -55,7 +55,8 @@ export const shop_config = pgTable("shop_config", {
   free_delivery_veg_threshold: numeric("free_delivery_veg_threshold").notNull().default("500"),
   free_delivery_fruit_threshold: numeric("free_delivery_fruit_threshold").notNull().default("1000"),
   free_delivery_mixed_threshold: numeric("free_delivery_mixed_threshold").notNull().default("700"),
-  flat_delivery_charge: numeric("flat_delivery_charge").notNull().default("50"),
+  flat_delivery_charge: numeric("flat_delivery_charge").notNull().default("20"),
+  min_order_amount: numeric("min_order_amount").notNull().default("500"),
   covered_areas: text("covered_areas").array(),
   // daily_blurb kept in schema but cron and display are retired in v2
   daily_blurb: text("daily_blurb"),

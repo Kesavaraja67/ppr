@@ -14,6 +14,7 @@ interface Config {
   free_delivery_fruit_threshold: string;
   free_delivery_mixed_threshold: string;
   flat_delivery_charge: string;
+  min_order_amount: string;
   covered_areas: string[] | null;
 }
 
@@ -53,6 +54,7 @@ export default function AdminSettingsPage() {
         free_delivery_fruit_threshold: Number(config.free_delivery_fruit_threshold),
         free_delivery_mixed_threshold: Number(config.free_delivery_mixed_threshold),
         flat_delivery_charge: Number(config.flat_delivery_charge),
+        min_order_amount: Number(config.min_order_amount),
       }),
     });
 
@@ -117,6 +119,7 @@ export default function AdminSettingsPage() {
         <h2 style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "14px", color: "#166534", display: "flex", alignItems: "center", gap: "8px" }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> Delivery Charges
         </h2>
+        {field("Minimum Order Value (₹)", "min_order_amount", "number", "Orders with all priced items below this total will be blocked.")}
         {field("Flat Delivery Charge (₹)", "flat_delivery_charge", "number", "Applied when order total is below the threshold.")}
         {field("Free Delivery — Vegetables only (₹)", "free_delivery_veg_threshold", "number", "Veg-only orders above this amount get free delivery.")}
         {field("Free Delivery — Fruits only (₹)", "free_delivery_fruit_threshold", "number", "Fruit-only orders above this amount get free delivery.")}

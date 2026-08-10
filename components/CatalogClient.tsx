@@ -733,8 +733,8 @@ function ProductCard({
               </span>
             </p>
           ) : (
-            <p style={{ margin: 0, fontSize: "0.72rem", fontStyle: "italic", color: "#888888", fontFamily: "var(--font)" }}>
-              Price will be updated soon
+            <p style={{ margin: 0, fontSize: "0.78rem", fontWeight: 600, color: "#DC2626", fontFamily: "var(--font)" }}>
+              Out of Stock
             </p>
           )}
         </div>

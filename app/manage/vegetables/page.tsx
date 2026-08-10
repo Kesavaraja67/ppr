@@ -322,7 +322,7 @@ export default function AdminVegetablesPage() {
           Price (₹) per {unit} — leave blank if you haven&apos;t decided yet
         </label>
         <p style={{ fontSize: "0.72rem", color: "#6b7280", marginBottom: "6px" }}>
-          Optional reference price shown to customers. If left empty, customers will see &quot;Price will be updated soon&quot;.
+          Optional reference price shown to customers. If left empty, customers will see &quot;Out of Stock&quot; in red.
         </p>
         <input
           className="admin-input"

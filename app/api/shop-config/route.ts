@@ -16,6 +16,13 @@ export async function GET() {
     lat: config.lat,
     long: config.long,
     delivery_radius_km: config.delivery_radius_km,
+    // Delivery charge thresholds — surfaced publicly so checkout can show
+    // accurate free-delivery info without an extra authenticated API call.
+    flat_delivery_charge: config.flat_delivery_charge,
+    free_delivery_veg_threshold: config.free_delivery_veg_threshold,
+    free_delivery_fruit_threshold: config.free_delivery_fruit_threshold,
+    free_delivery_mixed_threshold: config.free_delivery_mixed_threshold,
+    min_order_amount: config.min_order_amount ?? "500",
     covered_areas: config.covered_areas?.length
       ? config.covered_areas
       : [

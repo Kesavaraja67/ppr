@@ -6,9 +6,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Suspense } from "react";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID, CaptchaContainer } from "@/components/Msg91WidgetProvider";
 import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
+import { useCaptchaReady } from "@/hooks/useCaptchaReady";
 
 /** Abort an async operation after this many milliseconds. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -29,42 +30,83 @@ function LoginForm() {
   const otpInputRef = useRef<HTMLInputElement>(null);
   const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
-  const { ready: widgetReady, setShowCaptcha } = useMsg91Ready();
+  const { ready: widgetReady, widgetError } = useMsg91Ready();
+  const { captchaReady, captchaError } = useCaptchaReady(widgetReady);
+
+  const activeError = error || captchaError || widgetError || "";
 
   const handleSendOtp = (isResend = false) => {
     if (loading || isVerifying()) return;
+    if (!isResend && !captchaReady) return;
     resetVerification();
     const cleaned = normalizeIndianMobile(phone);
     if (cleaned.length !== 10) {
       setError("Enter a valid 10-digit mobile number");
       return;
     }
+    if (widgetError) {
+      setError(widgetError);
+      return;
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (!widgetReady || typeof (window as any).sendOtp !== "function") {
+    const win = window as any;
+
+    // Use MSG91 retryOtp API for resend requests without re-triggering captcha
+    if (isResend && typeof win.retryOtp === "function") {
+      setError("");
+      setLoading(true);
+      let timedOut = false;
+      const retryTimer = setTimeout(() => {
+        timedOut = true;
+        setError("Resend request timed out. Please try again.");
+        setLoading(false);
+      }, OTP_TIMEOUT_MS);
+
+      const handleSuccess = () => {
+        if (timedOut) return;
+        clearTimeout(retryTimer);
+        setLoading(false);
+        setResendCountdown(RESEND_COOLDOWN_S);
+      };
+
+      const handleFail = (err: unknown) => {
+        if (timedOut) return;
+        clearTimeout(retryTimer);
+        setError("Failed to resend OTP. Please try again.");
+        setLoading(false);
+        console.error("retryOtp failed:", err);
+      };
+
+      try {
+        win.retryOtp(handleSuccess, handleFail);
+      } catch {
+        win.sendOtp(`91${cleaned}`, handleSuccess, handleFail);
+      }
+      return;
+    }
+
+    if (!widgetReady || typeof win.sendOtp !== "function") {
       setError("OTP service is still loading. Please wait a moment and try again.");
       return;
     }
     setError("");
     setLoading(true);
-    setShowCaptcha(true);
 
     let timedOut = false;
     // Abort if MSG91 widget never calls back within OTP_TIMEOUT_MS
     const timer = setTimeout(() => {
       timedOut = true;
       resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
-      setShowCaptcha(false);
       setError("OTP request timed out. Please check your connection or Captcha and try again.");
       setLoading(false);
     }, OTP_TIMEOUT_MS);
 
-    // @ts-expect-error exposed by the MSG91 widget script
-    window.sendOtp(
+    win.sendOtp(
       `91${cleaned}`,
       () => {
         if (timedOut) return;
         clearTimeout(timer);
-        setShowCaptcha(false);
         if (!isResend) setStep("otp");
         setLoading(false);
         setResendCountdown(RESEND_COOLDOWN_S);
@@ -74,7 +116,6 @@ function LoginForm() {
         if (timedOut) return;
         clearTimeout(timer);
         resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
-        setShowCaptcha(false);
         setError("Failed to send OTP. Please try again.");
         setLoading(false);
         console.error(err);
@@ -421,7 +462,9 @@ function LoginForm() {
               />
             </div>
 
-            {error && (
+            <CaptchaContainer />
+
+            {activeError && (
               <div
                 style={{
                   background: "var(--error-light)",
@@ -443,7 +486,7 @@ function LoginForm() {
                     fontWeight: 500,
                   }}
                 >
-                  {error}
+                  {activeError}
                 </p>
               </div>
             )}
@@ -452,9 +495,15 @@ function LoginForm() {
               className="btn-accent"
               style={{ width: "100%", justifyContent: "center" }}
               onClick={() => handleSendOtp(false)}
-              disabled={loading}
+              disabled={loading || !widgetReady || !captchaReady}
             >
-              {loading ? "Sending OTP…" : "Send OTP →"}
+              {loading
+                ? "Sending OTP…"
+                : !widgetReady
+                ? "Loading service…"
+                : !captchaReady
+                ? "Preparing verification…"
+                : "Send OTP →"}
             </button>
 
             <p

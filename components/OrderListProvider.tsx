@@ -8,6 +8,7 @@ export interface OrderItem {
   name_ta: string;
   unit: string;
   image_url: string | null;
+  current_price?: string | null;
   qty: number;
 }
 

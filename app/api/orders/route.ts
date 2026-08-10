@@ -66,6 +66,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
+  // Fetch shop config for minimum order threshold
+  const [shopConf] = await db.select({ min_order_amount: shop_config.min_order_amount }).from(shop_config).limit(1);
+  const minOrderVal = shopConf ? Number(shopConf.min_order_amount) : 500;
+
   // Verify all vegetable IDs exist, are in stock, and check unit / mode permissions
   const vegIds = body.items.map((i) => i.veg_id);
   const foundVegs = await db
@@ -73,12 +77,16 @@ export async function POST(req: NextRequest) {
       id: vegetables.id,
       unit: vegetables.unit,
       allow_piece_mode: vegetables.allow_piece_mode,
+      current_price: vegetables.current_price,
       name_en: vegetables.name_en,
     })
     .from(vegetables)
     .where(and(inArray(vegetables.id, vegIds), eq(vegetables.in_stock, true)));
 
   const vegMap = new Map(foundVegs.map((v) => [v.id, v]));
+
+  let pricedSubtotal = 0;
+  let allItemsHavePrices = true;
 
   for (const item of body.items) {
     const dbVeg = vegMap.get(item.veg_id);
@@ -111,6 +119,28 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (
+      dbVeg.current_price !== null &&
+      dbVeg.current_price !== undefined &&
+      dbVeg.current_price !== "" &&
+      Number.isFinite(Number(dbVeg.current_price)) &&
+      Number(dbVeg.current_price) >= 0
+    ) {
+      pricedSubtotal += Math.round(Number(dbVeg.current_price) * 100) * item.qty;
+    } else {
+      allItemsHavePrices = false;
+    }
+  }
+
+  const pricedSubtotalAmount = pricedSubtotal / 100;
+
+  // Hard-block server-side ONLY when all items are priced and estimated subtotal < minOrderVal
+  if (allItemsHavePrices && pricedSubtotalAmount < minOrderVal) {
+    return NextResponse.json(
+      { error: `Minimum order value of ₹${minOrderVal} is required. Please add more items to your order.` },
+      { status: 422 }
+    );
   }
 
   // Resolve address ID

@@ -6,9 +6,10 @@ import Link from "next/link";
 import { useOrderList } from "@/components/OrderListProvider";
 import { haversineDistance } from "@/lib/haversine";
 import { normalizeIndianMobile } from "@/lib/auth-helpers";
-import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID } from "@/components/Msg91WidgetProvider";
+import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID, CaptchaContainer } from "@/components/Msg91WidgetProvider";
 import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
+import { useCaptchaReady } from "@/hooks/useCaptchaReady";
 
 /** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -65,6 +66,13 @@ function ConfirmOrderContent() {
   const [newAddressCoords, setNewAddressCoords] = useState<{ lat: number; long: number } | null>(null);
   const [locationError, setLocationError] = useState("");
   const [shopCoords, setShopCoords] = useState<{ lat: number; long: number; radius: number } | null>(null);
+  const [deliveryInfo, setDeliveryInfo] = useState<{
+    flatCharge: number;
+    vegThreshold: number;
+    fruitThreshold: number;
+    mixedThreshold: number;
+    minOrderAmount: number;
+  } | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -82,7 +90,10 @@ function ConfirmOrderContent() {
   const onboardOtpInputRef = useRef<HTMLInputElement>(null);
   const { isVerifying, startVerification, resetVerification, isValidAttempt } = useOtpVerificationGuard();
 
-  const { ready: widgetReady, setShowCaptcha } = useMsg91Ready();
+  const { ready: widgetReady } = useMsg91Ready();
+  const { captchaReady, captchaError } = useCaptchaReady(widgetReady);
+
+  const activeOtpError = otpError || captchaError || "";
 
 
   // Modal Escape key & focus handling
@@ -115,7 +126,9 @@ function ConfirmOrderContent() {
     return h >= 8 && h < 20;
   }
 
-  // Load shop config for distance check
+  const [freshPrices, setFreshPrices] = useState<Map<string, string | null>>(new Map());
+
+  // Load shop config for distance check + delivery thresholds
   useEffect(() => {
     fetch("/api/shop-config")
       .then((r) => r.json())
@@ -127,9 +140,59 @@ function ConfirmOrderContent() {
             radius: Number(d.delivery_radius_km) || 3,
           });
         }
+        if (d.flat_delivery_charge !== undefined) {
+          setDeliveryInfo({
+            flatCharge: Number(d.flat_delivery_charge),
+            vegThreshold: Number(d.free_delivery_veg_threshold),
+            fruitThreshold: Number(d.free_delivery_fruit_threshold),
+            mixedThreshold: Number(d.free_delivery_mixed_threshold),
+            minOrderAmount: Number(d.min_order_amount) || 500,
+          });
+        }
+      })
+      .catch(() => { });
+
+    // Fetch fresh vegetable catalog prices for revalidating minimum order
+    fetch("/api/admin/vegetables-list")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.vegetables)) {
+          const map = new Map<string, string | null>();
+          d.vegetables.forEach((v: { id: string; current_price?: string | null }) => {
+            map.set(v.id, v.current_price ?? null);
+          });
+          setFreshPrices(map);
+        }
       })
       .catch(() => { });
   }, []);
+
+  // Minimum Order Estimation & Enforcement with exact decimal / integer cents precision (R3)
+  const minOrderAmount = deliveryInfo?.minOrderAmount ?? 500;
+  const minOrderCents = Math.round(minOrderAmount * 100);
+
+  const pricedItems = items.filter((i) => {
+    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
+    return (
+      priceStr !== undefined &&
+      priceStr !== null &&
+      priceStr !== "" &&
+      Number.isFinite(Number(priceStr)) &&
+      Number(priceStr) >= 0
+    );
+  });
+
+  const subtotalCents = pricedItems.reduce((sum, i) => {
+    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
+    const priceCents = Math.round(Number(priceStr) * 100);
+    return sum + priceCents * i.qty;
+  }, 0);
+
+  const estimatedSubtotal = subtotalCents / 100;
+  const allItemsPriced = items.length > 0 && pricedItems.length === items.length;
+  const isMinOrderMet = subtotalCents >= minOrderCents;
+  const minOrderGap = Math.max(0, (minOrderCents - subtotalCents) / 100);
+  const isMinOrderBlocked = allItemsPriced && !isMinOrderMet;
 
   // Auth check on mount
   useEffect(() => {
@@ -187,6 +250,13 @@ function ConfirmOrderContent() {
 
   // Execute order submission
   const executeOrderSubmission = async (overrideAddressPayload?: unknown) => {
+    if (isMinOrderBlocked) {
+      setSubmitError(
+        `Minimum order value of ₹${minOrderAmount} required. Please add ₹${minOrderGap.toFixed(0)} more of priced items to your cart.`
+      );
+      return false;
+    }
+
     let addressPayload: unknown = overrideAddressPayload;
 
     if (!addressPayload) {
@@ -337,7 +407,7 @@ function ConfirmOrderContent() {
 
   // OTP Handling inside onboarding
   const handleSendOtp = () => {
-    if (otpLoading || isVerifying()) return;
+    if (otpLoading || isVerifying() || !captchaReady) return;
     resetVerification();
     const cleaned = normalizeIndianMobile(onboardPhone);
     if (cleaned.length !== 10) {
@@ -351,13 +421,11 @@ function ConfirmOrderContent() {
     }
     setOtpError("");
     setOtpLoading(true);
-    setShowCaptcha(true);
 
     let timedOut = false;
     const sendTimer = setTimeout(() => {
       timedOut = true;
       resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
-      setShowCaptcha(false);
       setOtpError("OTP request timed out. Please check your connection or Captcha and try again.");
       setOtpLoading(false);
     }, OTP_TIMEOUT_MS);
@@ -368,7 +436,6 @@ function ConfirmOrderContent() {
       () => {
         if (timedOut) return;
         clearTimeout(sendTimer);
-        setShowCaptcha(false);
         setOnboardingStep("otp");
         setOtpLoading(false);
         setTimeout(() => onboardOtpInputRef.current?.focus(), 50);
@@ -377,7 +444,6 @@ function ConfirmOrderContent() {
         if (timedOut) return;
         clearTimeout(sendTimer);
         resetMsg91Captcha(GLOBAL_CAPTCHA_RENDER_ID);
-        setShowCaptcha(false);
         setOtpError("Failed to send OTP. Please try again.");
         setOtpLoading(false);
         console.error(err);
@@ -725,26 +791,117 @@ function ConfirmOrderContent() {
         )}
       </div>
 
+      {/* Delivery Info Banner */}
+      {deliveryInfo && (
+        <div
+          style={{
+            background: "#F0FDF4",
+            border: "1.5px solid #BBF7D0",
+            borderRadius: "16px",
+            padding: "14px 16px",
+            marginBottom: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+          }}
+        >
+          <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#166534", margin: 0 }}>
+            🚚 Delivery Information
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "#374151", margin: 0, lineHeight: 1.5 }}>
+            Vegetables only: free above ₹{deliveryInfo.vegThreshold}
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "#374151", margin: 0, lineHeight: 1.5 }}>
+            Fruits only: free above ₹{deliveryInfo.fruitThreshold}
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "#374151", margin: 0, lineHeight: 1.5 }}>
+            Mixed orders: free above ₹{deliveryInfo.mixedThreshold}
+          </p>
+          <p style={{ fontSize: "0.78rem", color: "#6B7280", margin: 0, lineHeight: 1.5 }}>
+            Otherwise a flat ₹{deliveryInfo.flatCharge} delivery charge applies.
+          </p>
+        </div>
+      )}
+
+      {/* Minimum Order Value Banner (R3) */}
+      {items.length > 0 && (
+        allItemsPriced && !isMinOrderMet ? (
+          <div
+            style={{
+              background: "#FEF2F2",
+              border: "1.5px solid #FCA5A5",
+              borderRadius: "16px",
+              padding: "14px 16px",
+              marginBottom: "16px",
+            }}
+          >
+            <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#DC2626", margin: 0 }}>
+              ⚠️ Minimum Order Value: ₹{minOrderAmount}
+            </p>
+            <p style={{ fontSize: "0.8rem", color: "#991B1B", margin: "4px 0 0", lineHeight: 1.4 }}>
+              Cart estimated total is ₹{estimatedSubtotal.toFixed(0)}. Please add ₹{minOrderGap.toFixed(0)} more of priced items to reach the ₹{minOrderAmount} minimum.
+            </p>
+          </div>
+        ) : !allItemsPriced && !isMinOrderMet ? (
+          <div
+            style={{
+              background: "#EFF6FF",
+              border: "1.5px solid #BFDBFE",
+              borderRadius: "16px",
+              padding: "14px 16px",
+              marginBottom: "16px",
+            }}
+          >
+            <p style={{ fontSize: "0.83rem", fontWeight: 700, color: "#1E40AF", margin: 0 }}>
+              ℹ️ Minimum Order Value: ₹{minOrderAmount}
+            </p>
+            <p style={{ fontSize: "0.78rem", color: "#1E3A8A", margin: "4px 0 0", lineHeight: 1.4 }}>
+              Some items in your cart don&apos;t have reference prices yet — the shop will confirm your final total, but please ensure your total order will reach our ₹{minOrderAmount} minimum.
+            </p>
+          </div>
+        ) : (
+          <div
+            style={{
+              background: "#F0FDF4",
+              border: "1.5px solid #BBF7D0",
+              borderRadius: "16px",
+              padding: "10px 14px",
+              marginBottom: "16px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#166534" }}>
+              Priced Items Subtotal: ₹{estimatedSubtotal.toFixed(0)}
+            </span>
+            <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#15803D", background: "#DCFCE7", padding: "3px 8px", borderRadius: "9999px" }}>
+              ✓ Min. ₹{minOrderAmount} Met
+            </span>
+          </div>
+        )
+      )}
+
       {/* Submit Button */}
       <button
         onClick={handleSubmit}
-        disabled={submitting}
+        disabled={submitting || isMinOrderBlocked}
         style={{
           width: "100%",
           padding: "16px",
-          background: submitting ? "#A7F3D0" : "#1A6B47",
+          background: submitting || isMinOrderBlocked ? "#A7F3D0" : "#1A6B47",
           color: "#fff",
           border: "none",
           borderRadius: "9999px",
           fontFamily: "var(--font)",
           fontWeight: 700,
           fontSize: "1rem",
-          cursor: submitting ? "not-allowed" : "pointer",
+          cursor: submitting || isMinOrderBlocked ? "not-allowed" : "pointer",
           boxShadow: "0 6px 20px rgba(26,107,71,0.25)",
           transition: "all 0.15s ease",
         }}
       >
-        {submitting ? "Placing Order…" : "Submit Order →"}
+        {submitting ? "Placing Order…" : isMinOrderBlocked ? `Add ₹${minOrderGap.toFixed(0)} More to Order` : "Submit Order →"}
       </button>
 
       {/* 2-Step Onboarding Modal for First-Time / Logged-Out Users */}
@@ -785,12 +942,6 @@ function ConfirmOrderContent() {
               </button>
             </div>
 
-            {otpError && (
-              <div style={{ padding: "10px 14px", background: "#FEF2F2", color: "#DC2626", borderRadius: "12px", fontSize: "0.82rem", fontWeight: 600, marginBottom: "14px" }}>
-                {otpError}
-              </div>
-            )}
-
             {onboardingStep === "details" ? (
               <div>
                 <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "16px" }}>
@@ -825,9 +976,28 @@ function ConfirmOrderContent() {
                   </div>
                 </div>
 
+                <CaptchaContainer />
+
+                {activeOtpError && (
+                  <div
+                    style={{
+                      background: "#FEE2E2",
+                      border: "1px solid #FECACA",
+                      borderRadius: "10px",
+                      padding: "10px 14px",
+                      marginBottom: "16px",
+                      fontSize: "0.82rem",
+                      color: "#DC2626",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {activeOtpError}
+                  </div>
+                )}
+
                 <button
                   onClick={handleSendOtp}
-                  disabled={otpLoading}
+                  disabled={otpLoading || !widgetReady || !captchaReady}
                   style={{
                     width: "100%",
                     padding: "14px",
@@ -837,10 +1007,17 @@ function ConfirmOrderContent() {
                     borderRadius: "9999px",
                     fontWeight: 700,
                     fontSize: "0.95rem",
-                    cursor: otpLoading ? "not-allowed" : "pointer",
+                    cursor: (otpLoading || !widgetReady || !captchaReady) ? "not-allowed" : "pointer",
+                    opacity: (otpLoading || !widgetReady || !captchaReady) ? 0.7 : 1,
                   }}
                 >
-                  {otpLoading ? "Sending OTP…" : "Send Verification Code →"}
+                  {otpLoading
+                    ? "Sending OTP…"
+                    : !widgetReady
+                    ? "Loading service…"
+                    : !captchaReady
+                    ? "Preparing verification…"
+                    : "Send Verification Code →"}
                 </button>
               </div>
             ) : (

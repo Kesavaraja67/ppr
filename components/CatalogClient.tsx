@@ -13,6 +13,7 @@ interface Vegetable {
   unit: string;
   category: string;
   allow_piece_mode?: boolean;
+  current_price?: string | null;
   in_stock: boolean;
   image_url: string | null;
 }
@@ -548,6 +549,7 @@ function ProductCard({
         name_ta: veg.name_ta,
         unit: veg.unit,
         image_url: veg.image_url,
+        current_price: veg.current_price,
       });
     }
   };
@@ -715,12 +717,27 @@ function ProductCard({
             color: "var(--text-muted)",
             fontSize: "0.72rem",
             fontWeight: 600,
-            marginBottom: "12px",
+            marginBottom: "4px",
             fontFamily: "var(--font)",
           }}
         >
           {veg.name_ta} · per {activeUnit}
         </p>
+
+        <div style={{ marginBottom: "10px", minHeight: "20px" }}>
+          {veg.current_price !== undefined && veg.current_price !== null && veg.current_price !== "" && Number(veg.current_price) > 0 ? (
+            <p style={{ margin: 0, fontSize: "0.86rem", fontWeight: 700, color: "#166534", fontFamily: "var(--font)" }}>
+              ₹{Number(veg.current_price).toFixed(0)}{" "}
+              <span style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--text-muted)" }}>
+                / {veg.unit}
+              </span>
+            </p>
+          ) : (
+            <p style={{ margin: 0, fontSize: "0.72rem", fontStyle: "italic", color: "#888888", fontFamily: "var(--font)" }}>
+              Price will be updated soon
+            </p>
+          )}
+        </div>
 
         {veg.in_stock ? (
           qty === 0 ? (
@@ -1183,56 +1200,67 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
         ))}
       </div>
 
-      {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
-      {!shopOpen && (
+      {/* ── Collapsible Banners Container (Shop Closed & Freshness) ───────────────────── */}
+      <div
+        style={{
+          maxHeight: isScrolled ? "0px" : "300px",
+          opacity: isScrolled ? 0 : 1,
+          overflow: "hidden",
+          pointerEvents: isScrolled ? "none" : "auto",
+          transition: "all 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+        }}
+      >
+        {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
+        {!shopOpen && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: "0 16px 12px",
+              padding: "14px 16px",
+              background: "#FFF9F0",
+              border: "1.5px solid #FDE68A",
+              borderRadius: "16px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+            }}
+          >
+            <ClockIcon />
+            <div>
+              <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#92400E", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+                Orders accepted 8 AM – 8 PM only. Please come back during shop hours.
+              </p>
+              <p style={{ fontSize: "0.78rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+                காலை 8 மணி முதல் இரவு 8 மணி வரை மட்டும் ஆர்டர் ஏற்றுக்கொள்ளப்படும். கடை நேரத்தில் மீண்டும் வருகை தரவும்.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Freshness Positioning Banner (Bilingual) ────────────────────── */}
         <div
-          role="status"
-          aria-live="polite"
           style={{
-            margin: "0 16px 12px",
+            margin: "0 16px 8px",
             padding: "14px 16px",
-            background: "#FFF9F0",
-            border: "1.5px solid #FDE68A",
+            background: "#E6F4EE",
+            border: "1.5px solid #C3E6D0",
             borderRadius: "16px",
             display: "flex",
             alignItems: "flex-start",
             gap: "12px",
-            boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
           }}
         >
-          <ClockIcon />
+          <LeafIcon size={20} color="#1A6B47" />
           <div>
-            <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#92400E", fontFamily: "var(--font)", lineHeight: 1.35 }}>
-              Orders accepted 8 AM – 8 PM only. Please come back during shop hours.
+            <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1A6B47", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+              Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
             </p>
-            <p style={{ fontSize: "0.78rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-              காலை 8 மணி முதல் இரவு 8 மணி வரை மட்டும் ஆர்டர் ஏற்றுக்கொள்ளப்படும். கடை நேரத்தில் மீண்டும் வருகை தரவும்.
+            <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+              உங்கள் ஆர்டருக்காகவே தினமும் புதிதாக வாங்குகிறோம். முன்கூட்டியே சேமித்து வைக்கப்படுவதில்லை.
             </p>
           </div>
-        </div>
-      )}
-
-      {/* ── Freshness Positioning Banner (Bilingual) ────────────────────── */}
-      <div
-        style={{
-          margin: "0 16px 8px",
-          padding: "14px 16px",
-          background: "#E6F4EE",
-          border: "1.5px solid #C3E6D0",
-          borderRadius: "16px",
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "12px",
-        }}
-      >
-        <LeafIcon size={20} color="#1A6B47" />
-        <div>
-          <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1A6B47", fontFamily: "var(--font)", lineHeight: 1.35 }}>
-            Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
-          </p>
-          <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-            உங்கள் ஆர்டருக்காகவே தினமும் புதிதாக வாங்குகிறோம். முன்கூட்டியே சேமித்து வைக்கப்படுவதில்லை.
-          </p>
         </div>
       </div>
 
@@ -1792,6 +1820,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                     name_ta: veg.name_ta,
                     unit: "kg",
                     image_url: veg.image_url,
+                    current_price: veg.current_price,
                   });
                 }}
                 style={{
@@ -1830,6 +1859,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                       name_ta: veg.name_ta,
                       unit: "piece",
                       image_url: veg.image_url,
+                      current_price: veg.current_price,
                     });
                   }}
                   style={{

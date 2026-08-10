@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     free_delivery_fruit_threshold?: number;
     free_delivery_mixed_threshold?: number;
     flat_delivery_charge?: number;
+    min_order_amount?: number;
     covered_areas?: string[];
   };
 
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
     ["free_delivery_fruit_threshold", body.free_delivery_fruit_threshold],
     ["free_delivery_mixed_threshold", body.free_delivery_mixed_threshold],
     ["flat_delivery_charge", body.flat_delivery_charge],
+    ["min_order_amount", body.min_order_amount],
   ];
 
   for (const [name, val] of numericFields) {
@@ -93,6 +95,9 @@ export async function POST(req: NextRequest) {
       }),
       ...(body.flat_delivery_charge !== undefined && {
         flat_delivery_charge: String(body.flat_delivery_charge),
+      }),
+      ...(body.min_order_amount !== undefined && {
+        min_order_amount: String(body.min_order_amount),
       }),
       ...(body.covered_areas !== undefined && { covered_areas: body.covered_areas }),
     })

@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     unit: string;
     category: "vegetable" | "fruit" | "grocery";
     allow_piece_mode?: boolean;
+    current_price?: string | number | null;
     image_data_url?: string; // base64 JPEG resized client-side, ~30-50KB
   };
 
@@ -72,6 +73,19 @@ export async function POST(req: NextRequest) {
     lookupTamilName(body.name_en) ||
     body.name_en; // fallback: use English name if dictionary misses it
 
+  // Price-validity rule: null means unpriced; otherwise must be finite and non-negative (>= 0)
+  if (body.current_price !== undefined && body.current_price !== null && body.current_price !== "") {
+    const num = Number(body.current_price);
+    if (!Number.isFinite(num) || num < 0) {
+      return NextResponse.json({ error: "Invalid non-negative number for current_price" }, { status: 400 });
+    }
+  }
+
+  const priceVal =
+    body.current_price !== undefined && body.current_price !== null && body.current_price !== ""
+      ? String(Number(body.current_price))
+      : null;
+
   const [newVeg] = await db
     .insert(vegetables)
     .values({
@@ -80,7 +94,7 @@ export async function POST(req: NextRequest) {
       unit: body.unit.trim(),
       category: body.category,
       allow_piece_mode: body.allow_piece_mode ?? true,
-      current_price: "0",
+      current_price: priceVal,
       image_url: body.image_data_url ?? null,
       is_curated_image: false,
       updated_by: adminId,
@@ -106,6 +120,7 @@ export async function PATCH(req: NextRequest) {
     unit?: string;
     category?: "vegetable" | "fruit" | "grocery";
     allow_piece_mode?: boolean;
+    current_price?: string | number | null;
     image_data_url?: string;
     in_stock?: boolean;
   };
@@ -132,6 +147,19 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Image payload too large (max 500KB)" }, { status: 400 });
   }
 
+  let patchPrice: string | null | undefined = undefined;
+  if (body.current_price !== undefined) {
+    if (body.current_price !== null && body.current_price !== "") {
+      const num = Number(body.current_price);
+      if (!Number.isFinite(num) || num < 0) {
+        return NextResponse.json({ error: "Invalid non-negative number for current_price" }, { status: 400 });
+      }
+      patchPrice = String(num);
+    } else {
+      patchPrice = null;
+    }
+  }
+
   await db
     .update(vegetables)
     .set({
@@ -140,6 +168,7 @@ export async function PATCH(req: NextRequest) {
       ...(body.unit !== undefined && { unit: body.unit }),
       ...(body.category !== undefined && { category: body.category }),
       ...(body.allow_piece_mode !== undefined && { allow_piece_mode: body.allow_piece_mode }),
+      ...(patchPrice !== undefined && { current_price: patchPrice }),
       ...(body.image_data_url !== undefined && { image_url: body.image_data_url }),
       ...(body.in_stock !== undefined && { in_stock: body.in_stock }),
       updated_at: new Date(),

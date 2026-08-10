@@ -10,6 +10,7 @@ import { Msg91WidgetProvider, useMsg91Ready, GLOBAL_CAPTCHA_RENDER_ID, CaptchaCo
 import { resetMsg91Captcha } from "@/hooks/useMsg91Widget";
 import { useOtpVerificationGuard } from "@/hooks/useOtpVerificationGuard";
 import { useCaptchaReady } from "@/hooks/useCaptchaReady";
+import { computeSubtotalCents, getPricedItems } from "@/lib/order-math";
 
 /** Maximum time (ms) to wait for MSG91 widget & server responses before timing out. */
 const OTP_TIMEOUT_MS = 15_000;
@@ -167,32 +168,21 @@ function ConfirmOrderContent() {
       .catch(() => { });
   }, []);
 
-  // Minimum Order Estimation & Enforcement with exact decimal / integer cents precision (R3)
+  // Minimum Order Estimation & Enforcement — uses shared lib/order-math.ts helper
+  // (same calculation as the live running total in CatalogClient.tsx sticky bar).
   const minOrderAmount = deliveryInfo?.minOrderAmount ?? 500;
   const minOrderCents = Math.round(minOrderAmount * 100);
 
-  const pricedItems = items.filter((i) => {
-    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
-    return (
-      priceStr !== undefined &&
-      priceStr !== null &&
-      priceStr !== "" &&
-      Number.isFinite(Number(priceStr)) &&
-      Number(priceStr) >= 0
-    );
-  });
+  const pricedItems = getPricedItems(items, freshPrices);
 
-  const subtotalCents = pricedItems.reduce((sum, i) => {
-    const priceStr = freshPrices.get(i.veg_id) ?? i.current_price;
-    const priceCents = Math.round(Number(priceStr) * 100);
-    return sum + priceCents * i.qty;
-  }, 0);
+  const subtotalCents = computeSubtotalCents(items, freshPrices);
 
   const estimatedSubtotal = subtotalCents / 100;
   const allItemsPriced = items.length > 0 && pricedItems.length === items.length;
   const isMinOrderMet = subtotalCents >= minOrderCents;
   const minOrderGap = Math.max(0, (minOrderCents - subtotalCents) / 100);
   const isMinOrderBlocked = allItemsPriced && !isMinOrderMet;
+
 
   // Auth check on mount
   useEffect(() => {

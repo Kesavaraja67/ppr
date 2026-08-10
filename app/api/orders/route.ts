@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
 
   // Enforce ordering hours: 8 AM–8 PM IST
   if (!isWithinOrderWindow()) {
+    console.error("[orders] Rejected: outside order window", { userId: session.userId });
     return NextResponse.json(
       { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
       { status: 403 }
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.items || body.items.length === 0) {
+    console.error("[orders] Rejected: empty items", { userId: session.userId });
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
@@ -137,6 +139,11 @@ export async function POST(req: NextRequest) {
 
   // Hard-block server-side ONLY when all items are priced and estimated subtotal < minOrderVal
   if (allItemsHavePrices && pricedSubtotalAmount < minOrderVal) {
+    console.error("[orders] Rejected: min order not met", {
+      userId: session.userId,
+      subtotal: pricedSubtotalAmount,
+      minRequired: minOrderVal,
+    });
     return NextResponse.json(
       { error: `Minimum order value of ₹${minOrderVal} is required. Please add more items to your order.` },
       { status: 422 }
@@ -155,6 +162,11 @@ export async function POST(req: NextRequest) {
     );
 
     if (!withinRange) {
+      console.error("[orders] Rejected: new address outside delivery zone", {
+        userId: session.userId,
+        lat: body.new_address.lat,
+        long: body.new_address.long,
+      });
       return NextResponse.json(
         {
           error:
@@ -187,6 +199,10 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (!addr) {
+      console.error("[orders] Rejected: address not found or not owned by user", {
+        userId: session.userId,
+        addressId: body.address_id,
+      });
       return NextResponse.json({ error: "Address not found" }, { status: 404 });
     }
 
@@ -198,6 +214,12 @@ export async function POST(req: NextRequest) {
     );
 
     if (!withinRangeNow) {
+      console.error("[orders] Rejected: saved address now outside delivery zone", {
+        userId: session.userId,
+        addressId: body.address_id,
+        lat: addr.lat,
+        long: addr.long,
+      });
       // Self-heal stale flag so the UI reflects reality on next fetch
       if (addr.is_within_range) {
         await db

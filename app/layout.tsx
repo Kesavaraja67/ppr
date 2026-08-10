@@ -62,6 +62,7 @@ export const viewport: Viewport = {
 };
 
 import BottomNav from "@/components/BottomNav";
+import LeaveBanner from "@/components/LeaveBanner";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -98,6 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <div id="app-wrapper">
           <OrderListProvider>
+            <LeaveBanner />
             {children}
             <BottomNav />
           </OrderListProvider>

@@ -116,6 +116,17 @@ export function useMsg91Widget(captchaRenderId: string) {
       setWidgetError("Failed to load OTP service script.");
     };
     document.body.appendChild(script);
+
+    // Cleanup: clear the captcha container on unmount so the hCaptcha iframe
+    // injected by MSG91 does not persist as a stray element after navigation.
+    return () => {
+      try {
+        const container = document.getElementById(captchaRenderId);
+        if (container) container.innerHTML = "";
+      } catch {
+        // ignore
+      }
+    };
   }, [captchaRenderId]);
 
   return { ready, widgetError };

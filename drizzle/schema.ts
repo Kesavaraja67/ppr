@@ -61,6 +61,11 @@ export const shop_config = pgTable("shop_config", {
   // daily_blurb kept in schema but cron and display are retired in v2
   daily_blurb: text("daily_blurb"),
   daily_blurb_updated_at: timestamp("daily_blurb_updated_at", { withTimezone: true }),
+  // ── On-leave / closed-for-holiday banner (R7) ────────────────────────────
+  is_on_leave: boolean("is_on_leave").notNull().default(false),
+  leave_start_date: date("leave_start_date"),   // inclusive start (YYYY-MM-DD)
+  leave_end_date: date("leave_end_date"),       // inclusive end   (YYYY-MM-DD)
+  leave_message: text("leave_message"),         // optional custom message
 });
 
 // ─── offers (retired in v2 — kept in schema to avoid data loss) ───────────────

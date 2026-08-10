@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { lookupTamilName, lookupEnglishName } from "@/lib/tamil-dict";
 
 interface Vegetable {
   id: string;
@@ -35,6 +36,26 @@ function CameraIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
       <circle cx="12" cy="13" r="4" />
+    </svg>
+  );
+}
+
+function GalleryIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  );
+}
+
+function SparklesIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 3 L13.5 8.5 L19 10 L13.5 11.5 L12 17 L10.5 11.5 L5 10 L10.5 8.5 Z" />
+      <path d="M5 3 L5.8 5.2 L8 6 L5.8 6.8 L5 9 L4.2 6.8 L2 6 L4.2 5.2 Z" />
+      <path d="M19 14 L19.6 15.7 L21 16.5 L19.6 17.3 L19 19 L18.4 17.3 L17 16.5 L18.4 15.7 Z" />
     </svg>
   );
 }
@@ -95,14 +116,27 @@ export default function AdminVegetablesPage() {
   // Add/Edit Form State
   const [nameEn, setNameEn] = useState("");
   const [nameTa, setNameTa] = useState("");
-  const [nameTaLoading, setNameTaLoading] = useState(false);
   const [unit, setUnit] = useState("kg");
   const [category, setCategory] = useState("vegetable");
   const [allowPieceMode, setAllowPieceMode] = useState(true);
   const [currentPrice, setCurrentPrice] = useState("");
   const [imageData, setImageData] = useState<string | null>(null);
+  const [imageGenError, setImageGenError] = useState("");
+  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Translation auto-fill state & refs
+  const [taAutoFilled, setTaAutoFilled] = useState(false);
+  const [enAutoFilled, setEnAutoFilled] = useState(false);
+  const [taTranslating, setTaTranslating] = useState(false);
+  const [enTranslating, setEnTranslating] = useState(false);
+  const activeFieldRef = useRef<"en" | "ta" | null>(null);
+  const enDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const taDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Image file input refs
+  const fileRef = useRef<HTMLInputElement>(null);    // gallery
+  const cameraRef = useRef<HTMLInputElement>(null);  // camera
 
   useEffect(() => {
     fetch("/api/admin/vegetables")
@@ -111,26 +145,143 @@ export default function AdminVegetablesPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Auto-lookup Tamil name when English name is typed (only in add mode)
-  useEffect(() => {
-    if (editingVeg || !nameEn.trim() || nameTa) return;
-    const timer = setTimeout(async () => {
-      setNameTaLoading(true);
-      const res = await fetch(`/api/admin/vegetables-list?lookup=${encodeURIComponent(nameEn)}`);
-      if (res.ok) {
-        const d = await res.json();
-        if (d.tamil) setNameTa(d.tamil);
-      }
-      setNameTaLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
-  }, [nameEn, nameTa, editingVeg]);
+  // ── EN → TA auto-fill ────────────────────────────────────────────────────
+  const handleNameEnChange = useCallback(
+    (value: string) => {
+      setNameEn(value);
+      // Flip isEnAutoFilled off if user is actively editing English
+      if (enAutoFilled) setEnAutoFilled(false);
+
+      if (enDebounceRef.current) clearTimeout(enDebounceRef.current);
+      if (!value.trim()) return;
+
+      enDebounceRef.current = setTimeout(async () => {
+        // Only write to Tamil when Tamil field is not currently focused
+        if (activeFieldRef.current === "ta") return;
+        // Only overwrite Tamil if it is empty or was previously auto-filled
+        setNameTa((prevTa) => {
+          const wouldOverwrite = prevTa !== "" && !taAutoFilled;
+          if (wouldOverwrite) return prevTa;
+
+          // 1. Static dict lookup (instant)
+          const staticResult = lookupTamilName(value);
+          if (staticResult) {
+            setTaAutoFilled(true);
+            return staticResult;
+          }
+
+          // 2. API fallback (async, runs after returning current state)
+          setTaTranslating(true);
+          fetch("/api/admin/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: value.trim(), from: "en", to: "ta" }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.translation && activeFieldRef.current !== "ta") {
+                setNameTa((cur) => {
+                  if (cur === "" || taAutoFilled) {
+                    setTaAutoFilled(true);
+                    return d.translation;
+                  }
+                  return cur;
+                });
+              }
+            })
+            .catch(() => {/* fail silently */})
+            .finally(() => setTaTranslating(false));
+
+          return prevTa; // don't change yet — async will update
+        });
+      }, 300);
+    },
+    [enAutoFilled, taAutoFilled]
+  );
+
+  // ── TA → EN auto-fill ────────────────────────────────────────────────────
+  const handleNameTaChange = useCallback(
+    (value: string) => {
+      setNameTa(value);
+      if (taAutoFilled) setTaAutoFilled(false);
+
+      if (taDebounceRef.current) clearTimeout(taDebounceRef.current);
+      if (!value.trim()) return;
+
+      taDebounceRef.current = setTimeout(async () => {
+        if (activeFieldRef.current === "en") return;
+        setNameEn((prevEn) => {
+          const wouldOverwrite = prevEn !== "" && !enAutoFilled;
+          if (wouldOverwrite) return prevEn;
+
+          // 1. Static reverse dict (instant)
+          const staticResult = lookupEnglishName(value);
+          if (staticResult) {
+            const formatted = staticResult.charAt(0).toUpperCase() + staticResult.slice(1);
+            setEnAutoFilled(true);
+            return formatted;
+          }
+
+          // 2. API fallback
+          setEnTranslating(true);
+          fetch("/api/admin/translate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: value.trim(), from: "ta", to: "en" }),
+          })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d.translation && activeFieldRef.current !== "en") {
+                setNameEn((cur) => {
+                  if (cur === "" || enAutoFilled) {
+                    setEnAutoFilled(true);
+                    return d.translation;
+                  }
+                  return cur;
+                });
+              }
+            })
+            .catch(() => {/* fail silently */})
+            .finally(() => setEnTranslating(false));
+
+          return prevEn;
+        });
+      }, 300);
+    },
+    [taAutoFilled, enAutoFilled]
+  );
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const resized = await resizeImage(file);
     setImageData(resized);
+    setImageGenError("");
+    // Reset input so the same file can be re-selected
+    e.target.value = "";
+  };
+
+  const handleGenerateImage = async () => {
+    if (generating) return;
+    setGenerating(true);
+    setImageGenError("");
+    try {
+      const res = await fetch("/api/admin/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name_en: nameEn.trim(), name_ta: nameTa.trim() || undefined, category }),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) {
+        setImageGenError(d.error ?? "Image generation failed.");
+      } else if (d.imageDataUrl) {
+        setImageData(d.imageDataUrl);
+      }
+    } catch {
+      setImageGenError("Network error during image generation.");
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const startEdit = (veg: Vegetable) => {
@@ -142,6 +293,9 @@ export default function AdminVegetablesPage() {
     setAllowPieceMode(veg.allow_piece_mode ?? true);
     setCurrentPrice(veg.current_price ?? "");
     setImageData(veg.image_url);
+    setTaAutoFilled(false);
+    setEnAutoFilled(false);
+    setImageGenError("");
     setShowAdd(false);
   };
 
@@ -155,10 +309,16 @@ export default function AdminVegetablesPage() {
     setImageData(null);
     setShowAdd(false);
     setEditingVeg(null);
+    setTaAutoFilled(false);
+    setEnAutoFilled(false);
+    setImageGenError("");
+    if (enDebounceRef.current) clearTimeout(enDebounceRef.current);
+    if (taDebounceRef.current) clearTimeout(taDebounceRef.current);
   };
 
   const handleSave = async () => {
     if (!nameEn.trim() || !unit || !category) return;
+    if (generating) return; // block save while image is generating
     setSaving(true);
 
     const pricePayload = currentPrice.trim() !== "" ? currentPrice.trim() : null;
@@ -264,28 +424,46 @@ export default function AdminVegetablesPage() {
         {isEdit ? `Edit "${editingVeg?.name_en}"` : "Add New Item"}
       </h2>
 
+      {/* Name fields */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "10px" }}>
+        {/* English Name */}
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-            Name (English) *
+            Name (English) *{enTranslating ? " ⟳" : ""}
           </label>
           <input
             className="admin-input"
             placeholder="e.g. Tomato"
             value={nameEn}
-            onChange={(e) => setNameEn(e.target.value)}
+            onFocus={() => { activeFieldRef.current = "en"; }}
+            onBlur={() => { activeFieldRef.current = null; }}
+            onChange={(e) => handleNameEnChange(e.target.value)}
           />
+          {enAutoFilled && (
+            <p style={{ fontSize: "0.68rem", color: "#6b7280", fontStyle: "italic", marginTop: "3px" }}>
+              Auto-filled — tap to edit
+            </p>
+          )}
         </div>
+
+        {/* Tamil Name */}
         <div style={{ flex: 1 }}>
           <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
-            Name (Tamil) {nameTaLoading ? "..." : ""}
+            Name (Tamil){taTranslating ? " ⟳" : ""}
           </label>
           <input
             className="admin-input"
             placeholder="தக்காளி"
             value={nameTa}
-            onChange={(e) => setNameTa(e.target.value)}
+            onFocus={() => { activeFieldRef.current = "ta"; }}
+            onBlur={() => { activeFieldRef.current = null; }}
+            onChange={(e) => handleNameTaChange(e.target.value)}
           />
+          {taAutoFilled && (
+            <p style={{ fontSize: "0.68rem", color: "#6b7280", fontStyle: "italic", marginTop: "3px" }}>
+              Auto-filled — tap to edit
+            </p>
+          )}
         </div>
       </div>
 
@@ -348,41 +526,108 @@ export default function AdminVegetablesPage() {
         </label>
       </div>
 
-      {/* Photo upload */}
+      {/* ── Photo Section (Gallery / Camera / Generate) ───────────────────── */}
       <div style={{ marginBottom: "14px" }}>
         <label style={{ fontSize: "0.78rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: "4px" }}>
           Photo (optional)
         </label>
+
         {imageData ? (
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={imageData} alt="Preview" style={{ width: "60px", height: "60px", objectFit: "cover", borderRadius: "8px" }} />
-            <button onClick={() => setImageData(null)} style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
+            <button onClick={() => { setImageData(null); setImageGenError(""); }} style={{ color: "#dc2626", background: "none", border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
               Remove photo
             </button>
           </div>
         ) : (
-          <button
-            onClick={() => fileRef.current?.click()}
-            style={{
-              padding: "10px 18px",
-              border: `1.5px dashed ${isEdit ? "#bfdbfe" : "#bbf7d0"}`,
-              borderRadius: "9999px",
-              background: "#fff",
-              color: isEdit ? "#1e40af" : "#166534",
-              cursor: "pointer",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-          >
-            <CameraIcon /> Choose Photo
-          </button>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+            {/* Gallery button */}
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              style={{
+                padding: "9px 14px",
+                border: `1.5px solid ${isEdit ? "#bfdbfe" : "#bbf7d0"}`,
+                borderRadius: "9999px",
+                background: "#fff",
+                color: isEdit ? "#1e40af" : "#166534",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              <GalleryIcon /> Gallery
+            </button>
+
+            {/* Camera button */}
+            <button
+              type="button"
+              onClick={() => cameraRef.current?.click()}
+              style={{
+                padding: "9px 14px",
+                border: `1.5px solid ${isEdit ? "#bfdbfe" : "#bbf7d0"}`,
+                borderRadius: "9999px",
+                background: "#fff",
+                color: isEdit ? "#1e40af" : "#166534",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              <CameraIcon /> Camera
+            </button>
+
+            {/* AI Generate button */}
+            <button
+              type="button"
+              onClick={handleGenerateImage}
+              disabled={generating || !nameEn.trim()}
+              title={!nameEn.trim() ? "Enter an English name first" : "Generate a product photo with AI"}
+              style={{
+                padding: "9px 14px",
+                border: "1.5px solid #e0d9fc",
+                borderRadius: "9999px",
+                background: generating ? "#f5f3ff" : "#fff",
+                color: generating ? "#7c3aed" : "#6d28d9",
+                cursor: generating || !nameEn.trim() ? "not-allowed" : "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+                opacity: !nameEn.trim() ? 0.5 : 1,
+              }}
+            >
+              <SparklesIcon /> {generating ? "Generating…" : "AI Generate"}
+            </button>
+          </div>
         )}
+
+        {/* Image gen error (does not clear existing image) */}
+        {imageGenError && (
+          <p style={{ fontSize: "0.72rem", color: "#dc2626", marginTop: "6px" }}>
+            {imageGenError}
+          </p>
+        )}
+
+        {/* Hidden gallery input (no capture) */}
         <input
           ref={fileRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageChange}
+          style={{ display: "none" }}
+        />
+        {/* Hidden camera input (capture=environment) */}
+        <input
+          ref={cameraRef}
           type="file"
           accept="image/*"
           capture="environment"
@@ -395,14 +640,15 @@ export default function AdminVegetablesPage() {
         <button
           className="btn-accent"
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || generating}
           style={{
             flex: 1,
             justifyContent: "center",
             background: isEdit ? "#1e40af" : "#166534",
+            opacity: generating ? 0.6 : 1,
           }}
         >
-          {saving ? "Saving…" : isEdit ? "Save Changes" : "Save Item"}
+          {saving ? "Saving…" : generating ? "Wait (generating image…)" : isEdit ? "Save Changes" : "Save Item"}
         </button>
         <button
           onClick={resetForm}

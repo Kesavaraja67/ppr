@@ -39,6 +39,11 @@ export async function POST(req: NextRequest) {
     flat_delivery_charge?: number;
     min_order_amount?: number;
     covered_areas?: string[];
+    // Leave-mode fields (R7)
+    is_on_leave?: boolean;
+    leave_start_date?: string | null;  // YYYY-MM-DD or null to clear
+    leave_end_date?: string | null;    // YYYY-MM-DD or null to clear
+    leave_message?: string | null;
   };
 
   try {
@@ -100,6 +105,11 @@ export async function POST(req: NextRequest) {
         min_order_amount: String(body.min_order_amount),
       }),
       ...(body.covered_areas !== undefined && { covered_areas: body.covered_areas }),
+      // Leave-mode (R7)
+      ...(body.is_on_leave !== undefined && { is_on_leave: body.is_on_leave }),
+      ...("leave_start_date" in body && { leave_start_date: body.leave_start_date ?? null }),
+      ...("leave_end_date" in body && { leave_end_date: body.leave_end_date ?? null }),
+      ...("leave_message" in body && { leave_message: body.leave_message ?? null }),
     })
     .where(eq(shop_config.id, config.id));
 

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderList } from "./OrderListProvider";
+import { computeSubtotalCents } from "@/lib/order-math";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Vegetable {
@@ -26,6 +27,7 @@ interface ShopConfig {
   long: number;
   delivery_radius_km: number;
   covered_areas: string[];
+  min_order_amount?: string | number;
 }
 
 interface Props {
@@ -317,6 +319,12 @@ function formatWeightDisplay(kg: number): string {
 }
 
 // ── Kg Input Bar (typable numeric input, NO +/- buttons) ─────────────────────
+// R4/R5 fix: input tracks its own "what the user typed" state independently from
+// the parent qty prop while the field is focused. The render-phase resync (prevQty)
+// is guarded behind !isFocused so mid-keystroke re-renders triggered by
+// onQuantityChange can never overwrite an in-progress decimal entry. A 200ms
+// debounce on onQuantityChange prevents the parent cart state from updating on
+// every individual keystroke, which was the source of the snap-back.
 function KgInputBar({
   qty,
   onQuantityChange,
@@ -328,8 +336,12 @@ function KgInputBar({
 }) {
   const [prevQty, setPrevQty] = useState(qty);
   const [inputValue, setInputValue] = useState<string>(() => (qty > 0 ? String(qty) : "1"));
+  const [isFocused, setIsFocused] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  if (prevQty !== qty) {
+  // Only resync from parent qty when the input is NOT focused.
+  // While focused, inputValue is the single source of truth.
+  if (!isFocused && prevQty !== qty) {
     setPrevQty(qty);
     const parsedInput = parseFloat(inputValue);
     if (isNaN(parsedInput) || parsedInput !== qty) {
@@ -337,6 +349,7 @@ function KgInputBar({
     }
   }
 
+  // Use qty for the weight label (committed value), not inputValue (raw typing)
   const weightLabel = formatWeightDisplay(qty);
 
   return (
@@ -370,14 +383,24 @@ function KgInputBar({
           min="0.05"
           placeholder="e.g. 500 or 1.5"
           value={inputValue}
+          onFocus={() => setIsFocused(true)}
           onChange={(e) => {
-            setInputValue(e.target.value);
-            const { kg, isValid } = parseRawWeightInput(e.target.value);
-            if (isValid) {
-              onQuantityChange(kg);
-            }
+            const raw = e.target.value;
+            setInputValue(raw);
+            // Debounce the parent state update — do NOT call synchronously.
+            // This prevents the parent re-render that was snapping inputValue back.
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            debounceRef.current = setTimeout(() => {
+              const { kg, isValid } = parseRawWeightInput(raw);
+              if (isValid) {
+                onQuantityChange(kg);
+              }
+            }, 200);
           }}
           onBlur={() => {
+            // Cancel pending debounce — we'll commit synchronously on blur
+            if (debounceRef.current) clearTimeout(debounceRef.current);
+            setIsFocused(false);
             const { kg, isValid } = parseRawWeightInput(inputValue);
             if (!isValid || kg < 0.05) {
               setInputValue("0.1");
@@ -852,7 +875,21 @@ function useDeviceType(): "desktop" | "android" | "ios" | "other" {
 // ── Main Catalog ──────────────────────────────────────────────────────────────
 export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
-  const { totalCount } = useOrderList();
+  const { totalCount, items } = useOrderList();
+  const isMountedForTotal = useIsMounted();
+  // R3: live running subtotal from cart items using the shared order-math helper.
+  // We use item.current_price from cart state (no freshPrices map here — catalog
+  // doesn't do a separate revalidation fetch). This means the subtotal shown while
+  // browsing uses the price the item had when it was added to the cart, which is
+  // the same value used initially by confirm-order before it fetches fresh prices.
+  const runningSubtotalCents = isMountedForTotal
+    ? computeSubtotalCents(items, new Map())
+    : 0;
+  const minOrderAmount = config?.min_order_amount
+    ? Number(config.min_order_amount)
+    : 500;
+  const runningSubtotal = runningSubtotalCents / 100;
+  const isMinOrderMet = runningSubtotalCents >= Math.round(minOrderAmount * 100);
 
   type Category = "all" | "vegetable" | "fruit" | "grocery";
 
@@ -882,18 +919,28 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     setChoiceVeg(veg);
   };
 
-  // Scroll listener for collapsible header
+  // Scroll listener for collapsible header.
+  // RAF-throttled: only one React state update fires per animation frame,
+  // preventing excessive re-renders that cause jank on mid-range devices.
   useEffect(() => {
+    let rafId: number | null = null;
     const handleScroll = () => {
-      const y = window.scrollY;
-      if (y > 110) {
-        setIsScrolled(true);
-      } else if (y < 20) {
-        setIsScrolled(false);
-      }
+      if (rafId !== null) return; // already queued — skip
+      rafId = requestAnimationFrame(() => {
+        const y = window.scrollY;
+        if (y > 110) {
+          setIsScrolled(true);
+        } else if (y < 20) {
+          setIsScrolled(false);
+        }
+        rafId = null;
+      });
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Auto-close modal and prevent selection if shop hours change to closed
@@ -1026,9 +1073,20 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
           padding: isScrolled ? "12px 16px 14px" : "16px 16px 14px",
           borderBottomLeftRadius: isScrolled ? "22px" : "0px",
           borderBottomRightRadius: isScrolled ? "22px" : "0px",
-          boxShadow: isScrolled ? "0 8px 24px rgba(0, 0, 0, 0.08)" : "none",
-          borderBottom: isScrolled ? "1px solid rgba(0, 0, 0, 0.08)" : "none",
-          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          // Always keep a 1px border-width so layout never shifts when border
+          // appears/disappears — only the color transitions. This eliminates the
+          // "black line" artifact that appeared when toggling border: none ↔ 1px.
+          borderBottom: `1px solid ${isScrolled ? "rgba(0,0,0,0.08)" : "transparent"}`,
+          // Always keep a box-shadow present (just transparent when not scrolled)
+          // so the browser can composite it without a repaint on toggle.
+          boxShadow: isScrolled
+            ? "0 8px 24px rgba(0,0,0,0.08)"
+            : "0 0 0 rgba(0,0,0,0)",
+          // Only transition the properties that actually change.
+          // "all" was transitioning borderBottom between none ↔ 1px solid,
+          // which caused the black flicker line on scroll.
+          transition:
+            "background 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease, padding 0.28s ease, border-radius 0.3s ease",
         }}
       >
         {/* Collapsible Brand row */}
@@ -1037,11 +1095,18 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            maxHeight: isScrolled ? "0px" : "68px",
+            // Use exact height (56px = logo height) instead of maxHeight: 68px.
+            // maxHeight larger than actual content wastes animation time at the
+            // start (nothing visible moves) making it feel laggy. Exact height
+            // means the animation fills the full duration uniformly.
+            height: isScrolled ? "0" : "56px",
             opacity: isScrolled ? 0 : 1,
-            marginBottom: isScrolled ? "0px" : "14px",
+            marginBottom: isScrolled ? "0" : "14px",
             overflow: "hidden",
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            // Only transition height + opacity + margin, not "all".
+            // Opacity leads slightly so content fades before height collapses.
+            transition:
+              "height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease, margin-bottom 0.3s cubic-bezier(0.4,0,0.2,1)",
           }}
         >
           <a
@@ -1203,11 +1268,18 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
       {/* ── Collapsible Banners Container (Shop Closed & Freshness) ───────────────────── */}
       <div
         style={{
-          maxHeight: isScrolled ? "0px" : "300px",
+          // 170px ≈ actual content height (freshness banner ~90px + shop-closed
+          // banner ~80px). Previously 300px caused the first ~44% of the animation
+          // to be invisible (nothing moved until height crossed real content height)
+          // making it feel laggy. A tightly matched value fills the full duration.
+          maxHeight: isScrolled ? "0px" : "170px",
           opacity: isScrolled ? 0 : 1,
           overflow: "hidden",
           pointerEvents: isScrolled ? "none" : "auto",
-          transition: "all 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
+          // Only transition maxHeight + opacity, not "all".
+          // Opacity leads (0.22s) so content fades first, then height collapses (0.32s).
+          transition:
+            "max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease",
         }}
       >
         {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
@@ -1605,9 +1677,48 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
         </p>
       </footer>
 
-      {/* ── Sticky Order Bar ─────────────────────────────────────────────── */}
+      {/* ── Sticky Order Bar with live running total (R3) ────────────────── */}
       {totalCount > 0 && (
         <div className="sticky-bar">
+          {/* Min order progress strip */}
+          {runningSubtotalCents > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "6px 12px",
+                background: isMinOrderMet ? "#DCFCE7" : "rgba(255,255,255,0.12)",
+                borderRadius: "9999px",
+                marginBottom: "8px",
+              }}
+            >
+              {isMinOrderMet ? (
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    color: "#15803D",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  ✓ Min ₹{minOrderAmount} met
+                </span>
+              ) : (
+                <span
+                  style={{
+                    fontSize: "0.78rem",
+                    fontWeight: 600,
+                    color: "rgba(255,255,255,0.9)",
+                    fontFamily: "var(--font)",
+                  }}
+                >
+                  ₹{runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)} of ₹{minOrderAmount} minimum
+                </span>
+              )}
+            </div>
+          )}
           <button
             className="btn-accent"
             style={{

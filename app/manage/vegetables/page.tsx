@@ -176,7 +176,7 @@ export default function AdminVegetablesPage() {
           category,
           allow_piece_mode: allowPieceMode,
           current_price: pricePayload,
-          image_data_url: imageData ?? undefined,
+          image_data_url: imageData,
         }),
       });
 
@@ -220,14 +220,24 @@ export default function AdminVegetablesPage() {
 
   // Toggle item between Active and Removed (in_stock = true / false)
   const setItemStock = async (veg: Vegetable, inStock: boolean) => {
-    await fetch("/api/admin/vegetables", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: veg.id, in_stock: inStock }),
-    });
-    setVegetables((prev) =>
-      prev.map((v) => (v.id === veg.id ? { ...v, in_stock: inStock } : v))
-    );
+    try {
+      const res = await fetch("/api/admin/vegetables", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: veg.id, in_stock: inStock }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setVegetables((prev) =>
+          prev.map((v) => (v.id === veg.id ? d.vegetable ?? { ...v, in_stock: inStock } : v))
+        );
+      } else {
+        const d = await res.json().catch(() => ({}));
+        alert(d.error ?? "Failed to update item status.");
+      }
+    } catch {
+      alert("Network error updating item status.");
+    }
   };
 
   if (loading) {

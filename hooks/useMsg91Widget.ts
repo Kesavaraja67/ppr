@@ -74,6 +74,10 @@ export function useMsg91Widget(captchaRenderId: string) {
     if (typeof (window as WindowWithMSG91).initSendOTP === "function") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (typeof (window as any).sendOtp === "function") {
+        queueMicrotask(() => {
+          setReady(true);
+          setWidgetError(null);
+        });
         return;
       }
       runInit();

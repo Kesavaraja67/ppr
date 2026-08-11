@@ -1756,7 +1756,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
       </footer>
 
       {/* ── Sticky Order Bar with live running total (R3) ────────────────── */}
-      {totalCount > 0 && (
+      {isMountedForTotal && totalCount > 0 && (
         <div className="sticky-bar">
           {/* Min order progress strip */}
           {runningSubtotalCents > 0 && (
@@ -1823,10 +1823,16 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               }}
             >
               {totalCount} {totalCount === 1 ? "item" : "items"}
-              {runningSubtotalCents > 0 &&
-                ` - ${items.some((i) => i.unit === "piece") ? "Est. " : ""}Rs. ${
-                  runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)
-                }`}
+              {items.some((i) => i.unit === "piece") ? (
+                runningSubtotalCents > 0 ? (
+                  ` - Rs. ${runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)} (+ weighed at billing)`
+                ) : (
+                  " - Priced at billing"
+                )
+              ) : (
+                runningSubtotalCents > 0 &&
+                ` - Rs. ${runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)}`
+              )}
             </span>
           </button>
         </div>

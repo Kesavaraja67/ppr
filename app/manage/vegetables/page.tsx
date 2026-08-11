@@ -450,6 +450,7 @@ export default function AdminVegetablesPage() {
   const removedItems = vegetables.filter((v) => !v.in_stock);
   const rawList = activeTab === "active" ? activeItems : removedItems;
   const filteredItems = rawList.filter((v) => {
+    if (editingVeg && v.id === editingVeg.id) return true;
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase().trim();
     return (
@@ -802,12 +803,13 @@ export default function AdminVegetablesPage() {
           boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
         }}
       >
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="11" cy="11" r="8" />
           <line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
         <input
           type="text"
+          aria-label="Search catalog items"
           placeholder="Search items by English or Tamil name..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -824,6 +826,7 @@ export default function AdminVegetablesPage() {
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
+            aria-label="Clear item search"
             style={{
               background: "#E5E7EB",
               border: "none",

@@ -111,6 +111,7 @@ export default function AdminVegetablesPage() {
   const [vegetables, setVegetables] = useState<Vegetable[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"active" | "removed">("active");
+  const [searchQuery, setSearchQuery] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [editingVeg, setEditingVeg] = useState<Vegetable | null>(null);
 
@@ -447,8 +448,18 @@ export default function AdminVegetablesPage() {
 
   const activeItems = vegetables.filter((v) => v.in_stock);
   const removedItems = vegetables.filter((v) => !v.in_stock);
-  const displayedItems = activeTab === "active" ? activeItems : removedItems;
-  const sortedItems = [...displayedItems].sort((a, b) => a.name_en.localeCompare(b.name_en));
+  const rawList = activeTab === "active" ? activeItems : removedItems;
+  const filteredItems = rawList.filter((v) => {
+    if (editingVeg && v.id === editingVeg.id) return true;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      v.name_en.toLowerCase().includes(q) ||
+      v.name_ta.includes(q) ||
+      v.category.toLowerCase().includes(q)
+    );
+  });
+  const sortedItems = [...filteredItems].sort((a, b) => a.name_en.localeCompare(b.name_en));
 
   const renderItemForm = (isEdit: boolean) => (
     <div
@@ -742,7 +753,7 @@ export default function AdminVegetablesPage() {
           border: "1.5px solid #e5e7eb",
           borderRadius: "9999px",
           overflow: "hidden",
-          marginBottom: "20px",
+          marginBottom: "16px",
           background: "#fff",
         }}
       >
@@ -778,13 +789,73 @@ export default function AdminVegetablesPage() {
         </button>
       </div>
 
+      {/* Admin Search Bar */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          background: "#FFFFFF",
+          borderRadius: "14px",
+          padding: "10px 14px",
+          border: "1.5px solid #E5E7EB",
+          marginBottom: "20px",
+          boxShadow: "0 1px 4px rgba(0,0,0,0.03)",
+        }}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input
+          type="text"
+          aria-label="Search catalog items"
+          placeholder="Search items by English or Tamil name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={{
+            flex: 1,
+            border: "none",
+            outline: "none",
+            background: "transparent",
+            fontFamily: "var(--font)",
+            fontSize: "0.88rem",
+            color: "#1F2937",
+          }}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            aria-label="Clear item search"
+            style={{
+              background: "#E5E7EB",
+              border: "none",
+              cursor: "pointer",
+              width: "22px",
+              height: "22px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "#6B7280",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+            }}
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
       {/* Top Form (only shown for Add New) */}
       {showAdd && !editingVeg && renderItemForm(false)}
 
       {/* Items list */}
       {sortedItems.length === 0 ? (
         <div style={{ textAlign: "center", padding: "40px 16px", color: "#9ca3af", fontSize: "0.9rem" }}>
-          {activeTab === "active"
+          {searchQuery.trim()
+            ? `No items match "${searchQuery.trim()}".`
+            : activeTab === "active"
             ? "No active items in catalog."
             : "No removed items in archive."}
         </div>

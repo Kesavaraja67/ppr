@@ -69,6 +69,32 @@ export default function ManageLoginPage() {
       }}
     >
       <div style={{ width: "100%", maxWidth: "360px" }}>
+        {/* Navigation link to public store */}
+        <div style={{ marginBottom: "20px" }}>
+          <a
+            href="/"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              color: "#166534",
+              fontSize: "0.85rem",
+              fontWeight: 600,
+              textDecoration: "none",
+              background: "#F0FDF4",
+              border: "1px solid #BBF7D0",
+              padding: "6px 12px",
+              borderRadius: "9999px",
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            Back to Store
+          </a>
+        </div>
+
         {/* Logo area */}
         <div style={{ textAlign: "center", marginBottom: "36px" }}>
           <div

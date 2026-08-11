@@ -133,6 +133,9 @@ export default function AdminVegetablesPage() {
   const activeFieldRef = useRef<"en" | "ta" | null>(null);
   const enDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const taDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic counter incremented on resetForm so responses from the previous
+  // form session (translation or image gen) are silently dropped.
+  const formSessionRef = useRef(0);
 
   // Image file input refs
   const fileRef = useRef<HTMLInputElement>(null);    // gallery
@@ -158,7 +161,9 @@ export default function AdminVegetablesPage() {
       enDebounceRef.current = setTimeout(async () => {
         // Only write to Tamil when Tamil field is not currently focused
         if (activeFieldRef.current === "ta") return;
-        // Only overwrite Tamil if it is empty or was previously auto-filled
+        // Capture the source text and session at scheduling time
+        const sourceValue = value.trim();
+        const session = formSessionRef.current;
         setNameTa((prevTa) => {
           const wouldOverwrite = prevTa !== "" && !taAutoFilled;
           if (wouldOverwrite) return prevTa;
@@ -175,10 +180,12 @@ export default function AdminVegetablesPage() {
           fetch("/api/admin/translate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: value.trim(), from: "en", to: "ta" }),
+            body: JSON.stringify({ text: sourceValue, from: "en", to: "ta" }),
           })
             .then((r) => r.json())
             .then((d) => {
+              // Drop response if form was reset or English source changed
+              if (formSessionRef.current !== session) return;
               if (d.translation && activeFieldRef.current !== "ta") {
                 setNameTa((cur) => {
                   if (cur === "" || taAutoFilled) {
@@ -190,7 +197,9 @@ export default function AdminVegetablesPage() {
               }
             })
             .catch(() => {/* fail silently */})
-            .finally(() => setTaTranslating(false));
+            .finally(() => {
+              if (formSessionRef.current === session) setTaTranslating(false);
+            });
 
           return prevTa; // don't change yet — async will update
         });
@@ -210,6 +219,9 @@ export default function AdminVegetablesPage() {
 
       taDebounceRef.current = setTimeout(async () => {
         if (activeFieldRef.current === "en") return;
+        // Capture source and session at scheduling time
+        const sourceValue = value.trim();
+        const session = formSessionRef.current;
         setNameEn((prevEn) => {
           const wouldOverwrite = prevEn !== "" && !enAutoFilled;
           if (wouldOverwrite) return prevEn;
@@ -227,10 +239,12 @@ export default function AdminVegetablesPage() {
           fetch("/api/admin/translate", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: value.trim(), from: "ta", to: "en" }),
+            body: JSON.stringify({ text: sourceValue, from: "ta", to: "en" }),
           })
             .then((r) => r.json())
             .then((d) => {
+              // Drop response if form was reset or Tamil source changed
+              if (formSessionRef.current !== session) return;
               if (d.translation && activeFieldRef.current !== "en") {
                 setNameEn((cur) => {
                   if (cur === "" || enAutoFilled) {
@@ -242,7 +256,9 @@ export default function AdminVegetablesPage() {
               }
             })
             .catch(() => {/* fail silently */})
-            .finally(() => setEnTranslating(false));
+            .finally(() => {
+              if (formSessionRef.current === session) setEnTranslating(false);
+            });
 
           return prevEn;
         });
@@ -254,23 +270,30 @@ export default function AdminVegetablesPage() {
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const resized = await resizeImage(file);
-    setImageData(resized);
-    setImageGenError("");
-    // Reset input so the same file can be re-selected
+    // Always reset input immediately so the same file can be re-selected even
+    // if the following resize fails.
     e.target.value = "";
+    try {
+      const resized = await resizeImage(file);
+      setImageData(resized);
+      setImageGenError("");
+    } catch {
+      setImageGenError("Could not process the selected image. Please try a different file.");
+    }
   };
 
   const handleGenerateImage = async () => {
     if (generating) return;
     setGenerating(true);
     setImageGenError("");
+    const session = formSessionRef.current;
     try {
       const res = await fetch("/api/admin/generate-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name_en: nameEn.trim(), name_ta: nameTa.trim() || undefined, category }),
       });
+      if (formSessionRef.current !== session) return; // form was reset
       const d = await res.json();
       if (!res.ok || d.error) {
         setImageGenError(d.error ?? "Image generation failed.");
@@ -278,9 +301,11 @@ export default function AdminVegetablesPage() {
         setImageData(d.imageDataUrl);
       }
     } catch {
-      setImageGenError("Network error during image generation.");
+      if (formSessionRef.current === session) {
+        setImageGenError("Network error during image generation.");
+      }
     } finally {
-      setGenerating(false);
+      if (formSessionRef.current === session) setGenerating(false);
     }
   };
 
@@ -314,6 +339,9 @@ export default function AdminVegetablesPage() {
     setImageGenError("");
     if (enDebounceRef.current) clearTimeout(enDebounceRef.current);
     if (taDebounceRef.current) clearTimeout(taDebounceRef.current);
+    // Increment session so any in-flight translation or image-gen responses
+    // from the previous form session are silently ignored.
+    formSessionRef.current += 1;
   };
 
   const handleSave = async () => {
@@ -323,59 +351,64 @@ export default function AdminVegetablesPage() {
 
     const pricePayload = currentPrice.trim() !== "" ? currentPrice.trim() : null;
 
-    if (editingVeg) {
-      // UPDATE existing item
-      const res = await fetch("/api/admin/vegetables", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: editingVeg.id,
-          name_en: nameEn.trim(),
-          name_ta: nameTa.trim() || undefined,
-          unit,
-          category,
-          allow_piece_mode: allowPieceMode,
-          current_price: pricePayload,
-          image_data_url: imageData,
-        }),
-      });
+    try {
+      if (editingVeg) {
+        // UPDATE existing item
+        const res = await fetch("/api/admin/vegetables", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingVeg.id,
+            name_en: nameEn.trim(),
+            name_ta: nameTa.trim() || undefined,
+            unit,
+            category,
+            allow_piece_mode: allowPieceMode,
+            current_price: pricePayload,
+            image_data_url: imageData,
+          }),
+        });
 
-      if (res.ok) {
-        const d = await res.json();
-        setVegetables((prev) =>
-          prev.map((v) => (v.id === editingVeg.id ? d.vegetable : v))
-        );
-        resetForm();
+        if (res.ok) {
+          const d = await res.json();
+          setVegetables((prev) =>
+            prev.map((v) => (v.id === editingVeg.id ? d.vegetable : v))
+          );
+          resetForm();
+        } else {
+          const d = await res.json();
+          alert(d.error ?? "Failed to save changes.");
+        }
       } else {
-        const d = await res.json();
-        alert(d.error ?? "Failed to save changes.");
-      }
-    } else {
-      // ADD new item
-      const res = await fetch("/api/admin/vegetables", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name_en: nameEn.trim(),
-          name_ta: nameTa.trim() || undefined,
-          unit,
-          category,
-          allow_piece_mode: allowPieceMode,
-          current_price: pricePayload,
-          image_data_url: imageData ?? undefined,
-        }),
-      });
+        // ADD new item
+        const res = await fetch("/api/admin/vegetables", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name_en: nameEn.trim(),
+            name_ta: nameTa.trim() || undefined,
+            unit,
+            category,
+            allow_piece_mode: allowPieceMode,
+            current_price: pricePayload,
+            image_data_url: imageData ?? undefined,
+          }),
+        });
 
-      if (res.ok) {
-        const d = await res.json();
-        setVegetables((prev) => [...prev, d.vegetable]);
-        resetForm();
-      } else {
-        const d = await res.json();
-        alert(d.error ?? "Failed to add item.");
+        if (res.ok) {
+          const d = await res.json();
+          setVegetables((prev) => [...prev, d.vegetable]);
+          resetForm();
+        } else {
+          const d = await res.json();
+          alert(d.error ?? "Failed to add item.");
+        }
       }
+    } catch {
+      alert("A network error occurred. Please check your connection and try again.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   };
 
   // Toggle item between Active and Removed (in_stock = true / false)
@@ -675,7 +708,11 @@ export default function AdminVegetablesPage() {
       {/* Top Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <div>
-          <a href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280" }}>← Dashboard</a>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <a href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280", textDecoration: "none" }}>← Dashboard</a>
+            <span style={{ fontSize: "0.8rem", color: "#d1d5db" }}>•</span>
+            <a href="/" style={{ fontSize: "0.8rem", color: "#166534", fontWeight: 600, textDecoration: "none" }}>View Store</a>
+          </div>
           <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginTop: "4px" }}>Manage Items</h1>
         </div>
         <button

@@ -9,6 +9,7 @@
 export interface CartItemForMath {
   veg_id: string;
   qty: number;
+  unit?: string;
   current_price?: string | null;
 }
 
@@ -28,6 +29,10 @@ export function computeSubtotalCents(
   freshPrices: Map<string, string | null> = new Map()
 ): number {
   return items.reduce((sum, item) => {
+    // Piece-mode items have variable weight — price is determined at billing time when weighed
+    if (item.unit === "piece") {
+      return sum;
+    }
     const priceStr = freshPrices.get(item.veg_id) ?? item.current_price;
     if (
       priceStr === undefined ||
@@ -36,6 +41,10 @@ export function computeSubtotalCents(
       !Number.isFinite(Number(priceStr)) ||
       Number(priceStr) < 0
     ) {
+      return sum;
+    }
+    // Skip invalid quantities so a malformed cart item can't corrupt the total.
+    if (!Number.isFinite(item.qty) || item.qty < 0) {
       return sum;
     }
     const priceCents = Math.round(Number(priceStr) * 100);
@@ -51,6 +60,7 @@ export function getPricedItems(
   freshPrices: Map<string, string | null> = new Map()
 ): CartItemForMath[] {
   return items.filter((item) => {
+    if (item.unit === "piece") return false; // piece-mode items are weighed & priced during billing
     const priceStr = freshPrices.get(item.veg_id) ?? item.current_price;
     return (
       priceStr !== undefined &&
@@ -61,3 +71,4 @@ export function getPricedItems(
     );
   });
 }
+

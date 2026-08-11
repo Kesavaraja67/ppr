@@ -12,8 +12,15 @@ interface LeaveConfig {
 }
 
 function todayISODate(): string {
-  // Returns YYYY-MM-DD in IST
-  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  // Explicit parts avoids locale-dependent output (e.g. some environments
+  // don't support "en-CA" Intl locale). Always produces YYYY-MM-DD in IST.
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
 function formatDate(iso: string): string {
@@ -49,7 +56,8 @@ function buildMessage(cfg: LeaveConfig): string {
 export default function LeaveBanner() {
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState("");
-  const [dateRange, setDateRange] = useState<{ from?: string; until?: string }>({});
+  const [isCustomMessage, setIsCustomMessage] = useState(false);
+  const [dateRange, setDateRange] = useState<{ from?: string; until?: string }>();
 
   useEffect(() => {
     // Check session-level dismissal first to avoid flicker
@@ -63,6 +71,7 @@ export default function LeaveBanner() {
       .then((r) => r.json())
       .then((d: LeaveConfig & Record<string, unknown>) => {
         if (!isCurrentlyOnLeave(d)) return;
+        setIsCustomMessage(!!d.leave_message);
         setMessage(buildMessage(d));
         setDateRange({
           from: d.leave_start_date ?? undefined,
@@ -142,7 +151,9 @@ export default function LeaveBanner() {
         >
           {message}
         </p>
-        {(dateRange.from || dateRange.until) && !message.includes(dateRange.from ?? "__NEVER__") && (
+        {/* Show supplemental date line only for non-custom messages that have
+            at least one date to display. Custom messages include dates inline. */}
+        {!isCustomMessage && dateRange && (dateRange.from || dateRange.until) && (
           <p
             style={{
               fontSize: "0.72rem",
@@ -156,6 +167,8 @@ export default function LeaveBanner() {
               ? `${formatDate(dateRange.from)} – ${formatDate(dateRange.until)}`
               : dateRange.until
               ? `Until ${formatDate(dateRange.until)}`
+              : dateRange.from
+              ? `From ${formatDate(dateRange.from)}`
               : ""}
           </p>
         )}

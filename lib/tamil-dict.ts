@@ -157,5 +157,7 @@ export function getAllDictEntries(): Record<string, string> {
  * Returns undefined if not found.
  */
 export function lookupEnglishName(nameTa: string): string | undefined {
-  return REVERSE_DICT[nameTa.trim()];
+  // Normalize: trim and collapse internal whitespace to match REVERSE_DICT keys.
+  const normalized = nameTa.trim().replace(/\s+/g, " ");
+  return REVERSE_DICT[normalized];
 }

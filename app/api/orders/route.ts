@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
   // Enforce ordering hours: 8 AM–8 PM IST
   if (!isWithinOrderWindow()) {
-    console.error("[orders] Rejected: outside order window", { userId: session.userId });
+    console.error("[orders] Rejected: outside order window", { clientRequestId: null });
     return NextResponse.json(
       { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
       { status: 403 }
@@ -64,13 +64,32 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.items || body.items.length === 0) {
-    console.error("[orders] Rejected: empty items", { userId: session.userId });
+    console.error("[orders] Rejected: empty items", { clientRequestId: body.client_request_id ?? null });
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Fetch shop config for minimum order threshold
-  const [shopConf] = await db.select({ min_order_amount: shop_config.min_order_amount }).from(shop_config).limit(1);
+  // Fetch shop config for minimum order threshold and leave state
+  const [shopConf] = await db.select({
+    min_order_amount: shop_config.min_order_amount,
+    is_on_leave: shop_config.is_on_leave,
+    leave_start_date: shop_config.leave_start_date,
+    leave_end_date: shop_config.leave_end_date,
+  }).from(shop_config).limit(1);
   const minOrderVal = shopConf ? Number(shopConf.min_order_amount) : 500;
+
+  // Enforce leave mode: reject orders when the shop is on leave for today's date
+  if (shopConf?.is_on_leave) {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const afterStart = !shopConf.leave_start_date || today >= shopConf.leave_start_date;
+    const beforeEnd = !shopConf.leave_end_date || today <= shopConf.leave_end_date;
+    if (afterStart && beforeEnd) {
+      console.error("[orders] Rejected: shop on leave", { date: today });
+      return NextResponse.json(
+        { error: "The shop is temporarily closed and not accepting orders right now. Please try again when we reopen." },
+        { status: 503 }
+      );
+    }
+  }
 
   // Verify all vegetable IDs exist, are in stock, and check unit / mode permissions
   const vegIds = body.items.map((i) => i.veg_id);
@@ -140,7 +159,7 @@ export async function POST(req: NextRequest) {
   // Hard-block server-side ONLY when all items are priced and estimated subtotal < minOrderVal
   if (allItemsHavePrices && pricedSubtotalAmount < minOrderVal) {
     console.error("[orders] Rejected: min order not met", {
-      userId: session.userId,
+      clientRequestId: body.client_request_id ?? null,
       subtotal: pricedSubtotalAmount,
       minRequired: minOrderVal,
     });
@@ -163,15 +182,11 @@ export async function POST(req: NextRequest) {
 
     if (!withinRange) {
       console.error("[orders] Rejected: new address outside delivery zone", {
-        userId: session.userId,
-        lat: body.new_address.lat,
-        long: body.new_address.long,
+        clientRequestId: body.client_request_id ?? null,
+        radiusKm: null, // available from isAddressWithinDeliveryRange result if needed
       });
       return NextResponse.json(
-        {
-          error:
-            "Outside our delivery zone. Please call the shop to discuss options.",
-        },
+        { error: "Outside our delivery zone. Please call the shop to discuss options." },
         { status: 422 }
       );
     }
@@ -200,8 +215,7 @@ export async function POST(req: NextRequest) {
 
     if (!addr) {
       console.error("[orders] Rejected: address not found or not owned by user", {
-        userId: session.userId,
-        addressId: body.address_id,
+        clientRequestId: body.client_request_id ?? null,
       });
       return NextResponse.json({ error: "Address not found" }, { status: 404 });
     }
@@ -215,10 +229,8 @@ export async function POST(req: NextRequest) {
 
     if (!withinRangeNow) {
       console.error("[orders] Rejected: saved address now outside delivery zone", {
-        userId: session.userId,
+        clientRequestId: body.client_request_id ?? null,
         addressId: body.address_id,
-        lat: addr.lat,
-        long: addr.long,
       });
       // Self-heal stale flag so the UI reflects reality on next fetch
       if (addr.is_within_range) {

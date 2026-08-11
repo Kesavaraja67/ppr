@@ -31,10 +31,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ translation: null });
   }
 
-  const langName = (code: string) => (code === "en" ? "English" : "Tamil");
+  // Only support the two validated codes — reject anything else.
+  const SUPPORTED = new Set(["en", "ta"]);
+  if (!SUPPORTED.has(from) || !SUPPORTED.has(to) || from === to) {
+    return NextResponse.json({ translation: null });
+  }
+
+  const langName = (code: "en" | "ta") => (code === "en" ? "English" : "Tamil");
 
   const prompt = `You are a translation assistant for a grocery produce shop in Tamil Nadu, India.
-Translate the following food/produce name from ${langName(from)} to ${langName(to)}.
+Translate the following food/produce name from ${langName(from as "en" | "ta")} to ${langName(to as "en" | "ta")}.
 Return ONLY the translated name — no explanation, no punctuation, no alternatives.
 
 Input: ${text.trim()}
@@ -50,6 +56,7 @@ Translation:`;
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 64 },
         }),
+        signal: AbortSignal.timeout(8_000), // 8 s hard ceiling
       }
     );
 

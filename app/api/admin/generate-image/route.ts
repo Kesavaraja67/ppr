@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
             outputMimeType: "image/png",
           },
         }),
+        signal: AbortSignal.timeout(25_000), // 25 s — Imagen can be slow
       }
     );
 

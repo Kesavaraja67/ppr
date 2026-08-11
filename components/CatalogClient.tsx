@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState, useEffect, useRef, useSyncExternalStore } from "react";
+import { useState, useEffect, useRef, useMemo, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { useOrderList } from "./OrderListProvider";
 import { computeSubtotalCents } from "@/lib/order-math";
@@ -339,6 +339,14 @@ function KgInputBar({
   const [isFocused, setIsFocused] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Cancel any pending debounced parent callback when the component unmounts
+  // to prevent calling onQuantityChange on an already-removed item.
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current !== null) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
   // Only resync from parent qty when the input is NOT focused.
   // While focused, inputValue is the single source of truth.
   if (!isFocused && prevQty !== qty) {
@@ -559,8 +567,16 @@ function ProductCard({
 
   const allowPiece = veg.allow_piece_mode ?? true;
 
+  const hasPrice =
+    veg.current_price !== undefined &&
+    veg.current_price !== null &&
+    veg.current_price !== "" &&
+    Number.isFinite(Number(veg.current_price)) &&
+    Number(veg.current_price) > 0;
+  const isOrderable = Boolean(veg.in_stock && hasPrice);
+
   const handleAddToCartClick = (e: React.MouseEvent) => {
-    if (!shopOpen) return;
+    if (!shopOpen || !isOrderable) return;
     // Ask for unit selection on produce items that support dual-mode
     if (veg.category !== "grocery" && allowPiece) {
       onOpenChoice(veg, e);
@@ -607,7 +623,6 @@ function ProductCard({
   return (
     <div
       className="product-card"
-      style={{ opacity: veg.in_stock ? 1 : 0.55 }}
       aria-label={`${veg.name_en} — ${veg.name_ta}`}
     >
       {/* Colored image area */}
@@ -688,37 +703,6 @@ function ProductCard({
             {veg.name_en[0].toUpperCase()}
           </div>
         )}
-
-        {/* Out of stock overlay */}
-        {!veg.in_stock && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(20, 20, 20, 0.42)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              backdropFilter: "blur(2px)",
-            }}
-          >
-            <span
-              style={{
-                background: "rgba(255,255,255,0.94)",
-                color: "#666",
-                fontSize: "0.7rem",
-                fontWeight: 700,
-                fontFamily: "var(--font)",
-                padding: "4px 12px",
-                borderRadius: "9999px",
-                letterSpacing: "0.06em",
-                textTransform: "uppercase",
-              }}
-            >
-              Unavailable
-            </span>
-          </div>
-        )}
       </div>
 
       {/* White info area */}
@@ -748,7 +732,11 @@ function ProductCard({
         </p>
 
         <div style={{ marginBottom: "10px", minHeight: "20px" }}>
-          {veg.current_price !== undefined && veg.current_price !== null && veg.current_price !== "" && Number(veg.current_price) > 0 ? (
+          {activeUnit === "piece" && veg.unit === "kg" ? (
+            <p style={{ margin: 0, fontSize: "0.76rem", fontWeight: 700, color: "#1E40AF", fontFamily: "var(--font)" }}>
+              Priced at billing (by weight)
+            </p>
+          ) : veg.current_price !== undefined && veg.current_price !== null && veg.current_price !== "" && Number(veg.current_price) > 0 ? (
             <p style={{ margin: 0, fontSize: "0.86rem", fontWeight: 700, color: "#166534", fontFamily: "var(--font)" }}>
               ₹{Number(veg.current_price).toFixed(0)}{" "}
               <span style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--text-muted)" }}>
@@ -762,7 +750,7 @@ function ProductCard({
           )}
         </div>
 
-        {veg.in_stock ? (
+        {isOrderable ? (
           qty === 0 ? (
             <>
               <button
@@ -811,7 +799,29 @@ function ProductCard({
               onIncrement={handleIncrementPiece}
             />
           )
-        ) : null}
+        ) : (
+          <button
+            disabled
+            aria-disabled="true"
+            style={{
+              width: "100%",
+              height: "40px",
+              background: "#F3F4F6",
+              color: "#9CA3AF",
+              border: "1px solid #E5E7EB",
+              borderRadius: "9999px",
+              fontFamily: "var(--font)",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              cursor: "not-allowed",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            Out of Stock
+          </button>
+        )}
       </div>
     </div>
   );
@@ -877,17 +887,22 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const router = useRouter();
   const { totalCount, items } = useOrderList();
   const isMountedForTotal = useIsMounted();
-  // R3: live running subtotal from cart items using the shared order-math helper.
-  // We use item.current_price from cart state (no freshPrices map here — catalog
-  // doesn't do a separate revalidation fetch). This means the subtotal shown while
-  // browsing uses the price the item had when it was added to the cart, which is
-  // the same value used initially by confirm-order before it fetches fresh prices.
+
+  // Live produce catalog state — initialized with SSR data, updated live from API
+  const [vegs, setVegs] = useState<Vegetable[]>(allVegs);
+
+  const vegsPriceMap = useMemo(
+    () => new Map<string, string | null>(vegs.map((v) => [v.id, v.current_price ?? null])),
+    [vegs]
+  );
+
   const runningSubtotalCents = isMountedForTotal
-    ? computeSubtotalCents(items, new Map())
+    ? computeSubtotalCents(items, vegsPriceMap)
     : 0;
-  const minOrderAmount = config?.min_order_amount
-    ? Number(config.min_order_amount)
-    : 500;
+  // Normalize the same way as confirm-order: treat zero, missing, and
+  // non-numeric strings as ₹500 so catalog and checkout always agree.
+  const minOrderRaw = config?.min_order_amount ? Number(config.min_order_amount) : 0;
+  const minOrderAmount = Number.isFinite(minOrderRaw) && minOrderRaw > 0 ? minOrderRaw : 500;
   const runningSubtotal = runningSubtotalCents / 100;
   const isMinOrderMet = runningSubtotalCents >= Math.round(minOrderAmount * 100);
 
@@ -902,7 +917,6 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
   const [canInstall, setCanInstall] = useState(false);
 
   const [shopOpen, setShopOpen] = useState(isWithinOrderWindow);
-  const [isScrolled, setIsScrolled] = useState(false);
   const [choiceVeg, setChoiceVeg] = useState<Vegetable | null>(null);
   const { setQty } = useOrderList();
 
@@ -911,6 +925,13 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
 
   const openChoiceModal = (veg: Vegetable, e?: React.MouseEvent) => {
     if (!shopOpen) return;
+    const hasPrice =
+      veg.current_price !== undefined &&
+      veg.current_price !== null &&
+      veg.current_price !== "" &&
+      Number.isFinite(Number(veg.current_price)) &&
+      Number(veg.current_price) > 0;
+    if (!veg.in_stock || !hasPrice) return;
     if (e) {
       triggerRef.current = e.currentTarget as HTMLElement;
     } else {
@@ -918,30 +939,6 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     }
     setChoiceVeg(veg);
   };
-
-  // Scroll listener for collapsible header.
-  // RAF-throttled: only one React state update fires per animation frame,
-  // preventing excessive re-renders that cause jank on mid-range devices.
-  useEffect(() => {
-    let rafId: number | null = null;
-    const handleScroll = () => {
-      if (rafId !== null) return; // already queued — skip
-      rafId = requestAnimationFrame(() => {
-        const y = window.scrollY;
-        if (y > 110) {
-          setIsScrolled(true);
-        } else if (y < 20) {
-          setIsScrolled(false);
-        }
-        rafId = null;
-      });
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   // Auto-close modal and prevent selection if shop hours change to closed
   useEffect(() => {
@@ -1038,8 +1035,62 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     }
   };
 
+  useEffect(() => {
+    setVegs(allVegs);
+  }, [allVegs]);
+
+  // Re-fetch live produce prices & stock state periodically + on window focus
+  useEffect(() => {
+    const fetchLivePrices = async () => {
+      try {
+        const res = await fetch("/api/vegetables");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data.vegetables)) {
+            setVegs((prev) => {
+              const freshMap = new Map<string, Vegetable>();
+              data.vegetables.forEach((v: Vegetable) => freshMap.set(v.id, v));
+
+              // Update prices and stock status on existing items
+              return prev.map((v) => {
+                const fresh = freshMap.get(v.id);
+                if (fresh) {
+                  return {
+                    ...v,
+                    current_price: fresh.current_price,
+                    in_stock: fresh.in_stock,
+                    name_en: fresh.name_en,
+                    name_ta: fresh.name_ta,
+                    unit: fresh.unit,
+                    allow_piece_mode: fresh.allow_piece_mode,
+                    image_url: fresh.image_url ?? v.image_url,
+                  };
+                }
+                return v;
+              });
+            });
+          }
+        }
+      } catch {
+        // fail silently to preserve current vegs state
+      }
+    };
+
+    // Poll live prices every 10 seconds
+    const intervalId = setInterval(fetchLivePrices, 10_000);
+
+    // Also fetch immediately on window focus
+    const handleFocus = () => fetchLivePrices();
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, []);
+
   // Filter + search
-  const filtered = allVegs
+  const filtered = vegs
     .filter((v) => category === "all" || v.category === category)
     .filter(
       (v) =>
@@ -1059,156 +1110,184 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
 
   return (
     <div className="page-content">
+      {/* ── Brand Row (Normal document flow — scrolls away smoothly at native 120fps) ── */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 16px 12px",
+        }}
+      >
+        <a
+          href="/manage"
+          aria-label="Staff login"
+          style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none", color: "inherit" }}
+        >
+          <div
+            style={{
+              width: "52px",
+              height: "52px",
+              borderRadius: "14px",
+              overflow: "hidden",
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "#ffffff",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo.png?v=6"
+              alt="P.P.R. Fruits & Vegetables Logo"
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+              }}
+            />
+          </div>
+          <div>
+            <p
+              style={{
+                color: "var(--text-muted)",
+                fontSize: "0.65rem",
+                fontFamily: "var(--font)",
+                fontWeight: 500,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                lineHeight: 1,
+                marginBottom: "4px",
+              }}
+            >
+              Fresh daily · Coimbatore
+            </p>
+            <h1
+              style={{
+                fontSize: "1.1rem",
+                fontWeight: 700,
+                fontFamily: "var(--font)",
+                color: "var(--text-primary)",
+                lineHeight: 1.2,
+                letterSpacing: "-0.01em",
+              }}
+            >
+              P.P.R. Fruits &amp; Vegetables
+            </h1>
+          </div>
+        </a>
 
-      {/* ── Premium Sticky Header (Search bar remains pinned at top) ─────────── */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", alignSelf: "center" }}>
+          {!isStandalone && (canInstall || deviceType === "ios") && (
+            <button
+              onClick={handleInstallClick}
+              aria-label="Install App"
+              style={{
+                fontSize: "0.74rem",
+                padding: "7px 14px",
+                background: "#E6F4EE",
+                color: "#1A6B47",
+                border: "1.5px solid #C3E6D0",
+                borderRadius: "9999px",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontFamily: "var(--font)",
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              {deviceType === "desktop" ? <LaptopIcon size={14} /> : <PhoneIcon size={13} />}
+              {deviceType === "desktop" ? "Install App" : "Install"}
+            </button>
+          )}
+          <OrderListIcon count={totalCount} />
+        </div>
+      </div>
+
+      {/* ── Banners Container (Shop Closed & Freshness — scrolls away naturally) ── */}
+      <div>
+        {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
+        {!shopOpen && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              margin: "0 16px 10px",
+              padding: "12px 14px",
+              background: "#FFF9F0",
+              border: "1.5px solid #FDE68A",
+              borderRadius: "16px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "12px",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
+            }}
+          >
+            <ClockIcon />
+            <div>
+              <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#92400E", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+                Orders accepted 8 AM – 8 PM only. Please come back during shop hours.
+              </p>
+              <p style={{ fontSize: "0.78rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+                காலை 8 மணி முதல் இரவு 8 மணி வரை மட்டும் ஆர்டர் ஏற்றுக்கொள்ளப்படும். கடை நேரத்தில் மீண்டும் வருகை தரவும்.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ── Freshness Positioning Banner (Bilingual) ────────────────────── */}
+        <div
+          style={{
+            margin: "0 16px 10px",
+            padding: "12px 14px",
+            background: "#E6F4EE",
+            border: "1.5px solid #C3E6D0",
+            borderRadius: "16px",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "12px",
+          }}
+        >
+          <LeafIcon size={20} color="#1A6B47" />
+          <div>
+            <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1A6B47", fontFamily: "var(--font)", lineHeight: 1.35 }}>
+              Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
+            </p>
+            <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
+              உங்கள் ஆர்டருக்காகவே தினமும் புதிதாக வாங்குகிறோம். முன்கூட்டியே சேமித்து வைக்கப்படுவதில்லை.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Native Sticky Header (Search bar + Category Pills pinned at top: 0) ─────────── */}
       <header
-        className={`catalog-header ${isScrolled ? "is-scrolled" : ""}`}
         style={{
           position: "sticky",
           top: 0,
           zIndex: 90,
-          background: isScrolled ? "rgba(255, 255, 255, 0.94)" : "var(--bg)",
-          backdropFilter: "blur(18px)",
-          WebkitBackdropFilter: "blur(18px)",
-          padding: isScrolled ? "12px 16px 14px" : "16px 16px 14px",
-          borderBottomLeftRadius: isScrolled ? "22px" : "0px",
-          borderBottomRightRadius: isScrolled ? "22px" : "0px",
-          // Always keep a 1px border-width so layout never shifts when border
-          // appears/disappears — only the color transitions. This eliminates the
-          // "black line" artifact that appeared when toggling border: none ↔ 1px.
-          borderBottom: `1px solid ${isScrolled ? "rgba(0,0,0,0.08)" : "transparent"}`,
-          // Always keep a box-shadow present (just transparent when not scrolled)
-          // so the browser can composite it without a repaint on toggle.
-          boxShadow: isScrolled
-            ? "0 8px 24px rgba(0,0,0,0.08)"
-            : "0 0 0 rgba(0,0,0,0)",
-          // Only transition the properties that actually change.
-          // "all" was transitioning borderBottom between none ↔ 1px solid,
-          // which caused the black flicker line on scroll.
-          transition:
-            "background 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease, padding 0.28s ease, border-radius 0.3s ease",
+          background: "rgba(255, 255, 255, 0.95)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          padding: "10px 16px 8px",
+          borderBottom: "1px solid rgba(0, 0, 0, 0.08)",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.04)",
         }}
       >
-        {/* Collapsible Brand row */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            // Use exact height (56px = logo height) instead of maxHeight: 68px.
-            // maxHeight larger than actual content wastes animation time at the
-            // start (nothing visible moves) making it feel laggy. Exact height
-            // means the animation fills the full duration uniformly.
-            height: isScrolled ? "0" : "56px",
-            opacity: isScrolled ? 0 : 1,
-            marginBottom: isScrolled ? "0" : "14px",
-            overflow: "hidden",
-            // Only transition height + opacity + margin, not "all".
-            // Opacity leads slightly so content fades before height collapses.
-            transition:
-              "height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease, margin-bottom 0.3s cubic-bezier(0.4,0,0.2,1)",
-          }}
-        >
-          <a
-            href="/manage"
-            aria-label="Staff login"
-            style={{ display: "flex", alignItems: "center", gap: "12px", textDecoration: "none", color: "inherit" }}
-          >
-            <div
-              style={{
-                width: "56px",
-                height: "56px",
-                borderRadius: "14px",
-                overflow: "hidden",
-                flexShrink: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "#ffffff",
-                boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
-              }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/logo.png?v=6"
-                alt="P.P.R. Fruits & Vegetables Logo"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-              />
-            </div>
-            <div>
-              <p
-                style={{
-                  color: "var(--text-muted)",
-                  fontSize: "0.65rem",
-                  fontFamily: "var(--font)",
-                  fontWeight: 500,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  lineHeight: 1,
-                  marginBottom: "4px",
-                }}
-              >
-                Fresh daily · Coimbatore
-              </p>
-              <h1
-                style={{
-                  fontSize: "1.1rem",
-                  fontWeight: 700,
-                  fontFamily: "var(--font)",
-                  color: "var(--text-primary)",
-                  lineHeight: 1.2,
-                  letterSpacing: "-0.01em",
-                }}
-              >
-                P.P.R. Fruits &amp; Vegetables
-              </h1>
-            </div>
-          </a>
-
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", alignSelf: "center" }}>
-            {!isStandalone && (canInstall || deviceType === "ios") && (
-              <button
-                onClick={handleInstallClick}
-                aria-label="Install App"
-                style={{
-                  fontSize: "0.74rem",
-                  padding: "7px 14px",
-                  background: "#E6F4EE",
-                  color: "#1A6B47",
-                  border: "1.5px solid #C3E6D0",
-                  borderRadius: "9999px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  fontFamily: "var(--font)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                }}
-              >
-                {deviceType === "desktop" ? <LaptopIcon size={14} /> : <PhoneIcon size={13} />}
-                {deviceType === "desktop" ? "Install App" : "Install"}
-              </button>
-            )}
-            <OrderListIcon count={totalCount} />
-          </div>
-        </div>
-
         {/* Search bar */}
         <div
           style={{
             display: "flex",
             alignItems: "center",
             gap: "10px",
-            background: isScrolled ? "#F0F4F2" : "#F5F7F6",
+            background: "#F5F7F6",
             borderRadius: "16px",
             padding: "11px 16px",
             border: "1.5px solid var(--border)",
-            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
           <SearchIcon />
@@ -1249,92 +1328,21 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
             </button>
           )}
         </div>
-      </header>
 
-      {/* ── Category Pills ───────────────────────────────────────────────── */}
-      <div className="cat-pill-row">
-        {categories.map((cat) => (
-          <button
-            key={cat.id}
-            className={`cat-pill${category === cat.id ? " active" : ""}`}
-            onClick={() => setCategory(cat.id)}
-            aria-pressed={category === cat.id}
-          >
-            {cat.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Collapsible Banners Container (Shop Closed & Freshness) ───────────────────── */}
-      <div
-        style={{
-          // 170px ≈ actual content height (freshness banner ~90px + shop-closed
-          // banner ~80px). Previously 300px caused the first ~44% of the animation
-          // to be invisible (nothing moved until height crossed real content height)
-          // making it feel laggy. A tightly matched value fills the full duration.
-          maxHeight: isScrolled ? "0px" : "170px",
-          opacity: isScrolled ? 0 : 1,
-          overflow: "hidden",
-          pointerEvents: isScrolled ? "none" : "auto",
-          // Only transition maxHeight + opacity, not "all".
-          // Opacity leads (0.22s) so content fades first, then height collapses (0.32s).
-          transition:
-            "max-height 0.32s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.22s ease",
-        }}
-      >
-        {/* ── Shop closed banner (Bilingual) ────────────────────────────────── */}
-        {!shopOpen && (
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              margin: "0 16px 12px",
-              padding: "14px 16px",
-              background: "#FFF9F0",
-              border: "1.5px solid #FDE68A",
-              borderRadius: "16px",
-              display: "flex",
-              alignItems: "flex-start",
-              gap: "12px",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.02)",
-            }}
-          >
-            <ClockIcon />
-            <div>
-              <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#92400E", fontFamily: "var(--font)", lineHeight: 1.35 }}>
-                Orders accepted 8 AM – 8 PM only. Please come back during shop hours.
-              </p>
-              <p style={{ fontSize: "0.78rem", color: "#B45309", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-                காலை 8 மணி முதல் இரவு 8 மணி வரை மட்டும் ஆர்டர் ஏற்றுக்கொள்ளப்படும். கடை நேரத்தில் மீண்டும் வருகை தரவும்.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* ── Freshness Positioning Banner (Bilingual) ────────────────────── */}
-        <div
-          style={{
-            margin: "0 16px 8px",
-            padding: "14px 16px",
-            background: "#E6F4EE",
-            border: "1.5px solid #C3E6D0",
-            borderRadius: "16px",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "12px",
-          }}
-        >
-          <LeafIcon size={20} color="#1A6B47" />
-          <div>
-            <p style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1A6B47", fontFamily: "var(--font)", lineHeight: 1.35 }}>
-              Fresh, daily-bought — never stocked. We buy for your order, not from a warehouse.
-            </p>
-            <p style={{ fontSize: "0.78rem", color: "#2F855A", fontFamily: "var(--font)", marginTop: "4px", lineHeight: 1.4 }}>
-              உங்கள் ஆர்டருக்காகவே தினமும் புதிதாக வாங்குகிறோம். முன்கூட்டியே சேமித்து வைக்கப்படுவதில்லை.
-            </p>
-          </div>
+        {/* ── Category Pills (integrated inside sticky header) ─────────── */}
+        <div className="cat-pill-row" style={{ marginTop: "10px", marginBottom: "2px" }}>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              className={`cat-pill${category === cat.id ? " active" : ""}`}
+              onClick={() => setCategory(cat.id)}
+              aria-pressed={category === cat.id}
+            >
+              {cat.label}
+            </button>
+          ))}
         </div>
-      </div>
+      </header>
 
       {/* ── Section Header ──────────────────────────────────────────────── */}
       <div
@@ -1736,13 +1744,18 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               style={{
                 background: "rgba(255,255,255,0.2)",
                 borderRadius: "9999px",
-                padding: "3px 12px",
-                fontSize: "0.8rem",
+                padding: "4px 14px",
+                fontSize: "0.82rem",
                 fontWeight: 700,
                 fontFamily: "var(--font)",
+                display: "inline-flex",
+                alignItems: "center",
               }}
             >
-              {totalCount} {totalCount === 1 ? "item" : "items"}
+              {runningSubtotalCents > 0 && (
+                <span>₹{runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)} · </span>
+              )}
+              <span>{totalCount} {totalCount === 1 ? "item" : "items"}</span>
             </span>
           </button>
         </div>

@@ -45,6 +45,17 @@ export function useMsg91Widget(captchaRenderId: string) {
     // Reset the captcha container element on mount to ensure clean state
     resetMsg91Captcha(captchaRenderId);
 
+    // disposed is set true in cleanup; all async callbacks check it before
+    // touching state so that unmount after a fast navigation does not cause
+    // React state-update-on-unmounted-component warnings or stray widget init.
+    let disposed = false;
+
+    const cleanup = () => {
+      disposed = true;
+      initialized.current = false;
+      resetMsg91Captcha(captchaRenderId);
+    };
+
     // Build configuration
     const configuration = {
       widgetId: process.env.NEXT_PUBLIC_MSG91_WIDGET_ID,
@@ -53,18 +64,23 @@ export function useMsg91Widget(captchaRenderId: string) {
       captchaRenderId,
       success: () => { },
       failure: (err: unknown) => {
+        if (disposed) return;
         console.error("MSG91 widget error:", err);
         setWidgetError("Failed to initialize OTP service. Please refresh.");
       },
     };
 
     const runInit = () => {
+      if (disposed) return;
       try {
         // @ts-expect-error global exposed by the MSG91 otp-provider script
         window.initSendOTP(configuration);
-        setReady(true);
-        setWidgetError(null);
+        if (!disposed) {
+          setReady(true);
+          setWidgetError(null);
+        }
       } catch (err) {
+        if (disposed) return;
         console.warn("MSG91 initSendOTP caught error:", err);
         setWidgetError("Failed to start OTP service. Please refresh and try again.");
       }
@@ -75,17 +91,19 @@ export function useMsg91Widget(captchaRenderId: string) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       if (typeof (window as any).sendOtp === "function") {
         queueMicrotask(() => {
-          setReady(true);
-          setWidgetError(null);
+          if (!disposed) {
+            setReady(true);
+            setWidgetError(null);
+          }
         });
-        return;
+        return cleanup;
       }
       runInit();
-      return;
+      return cleanup;
     }
 
     // Guard against Strict Mode double-invocation during initial script load
-    if (initialized.current) return;
+    if (initialized.current) return cleanup;
     initialized.current = true;
 
     // Detect an existing script element
@@ -100,9 +118,11 @@ export function useMsg91Widget(captchaRenderId: string) {
         runInit();
       };
       existing.onerror = () => {
-        setWidgetError("Failed to load OTP service script.");
+        initialized.current = false;
+        existing.remove();
+        if (!disposed) setWidgetError("Failed to load OTP service script.");
       };
-      return;
+      return cleanup;
     }
 
     // First load
@@ -113,9 +133,13 @@ export function useMsg91Widget(captchaRenderId: string) {
       runInit();
     };
     script.onerror = () => {
-      setWidgetError("Failed to load OTP service script.");
+      initialized.current = false;
+      script.remove();
+      if (!disposed) setWidgetError("Failed to load OTP service script.");
     };
     document.body.appendChild(script);
+
+    return cleanup;
   }, [captchaRenderId]);
 
   return { ready, widgetError };

@@ -39,6 +39,11 @@ export async function POST(req: NextRequest) {
     flat_delivery_charge?: number;
     min_order_amount?: number;
     covered_areas?: string[];
+    // Leave-mode fields (R7)
+    is_on_leave?: boolean;
+    leave_start_date?: string | null;  // YYYY-MM-DD or null to clear
+    leave_end_date?: string | null;    // YYYY-MM-DD or null to clear
+    leave_message?: string | null;
   };
 
   try {
@@ -73,6 +78,32 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ── Leave-field validation ───────────────────────────────────────────────
+  const DATE_RE = /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/;
+
+  if (body.is_on_leave !== undefined && typeof body.is_on_leave !== "boolean") {
+    return NextResponse.json({ error: "is_on_leave must be a boolean" }, { status: 400 });
+  }
+  if ("leave_message" in body && body.leave_message !== null && typeof body.leave_message !== "string") {
+    return NextResponse.json({ error: "leave_message must be a string or null" }, { status: 400 });
+  }
+  if ("leave_start_date" in body && body.leave_start_date !== null) {
+    if (typeof body.leave_start_date !== "string" || !DATE_RE.test(body.leave_start_date)) {
+      return NextResponse.json({ error: "leave_start_date must be a YYYY-MM-DD date string or null" }, { status: 400 });
+    }
+  }
+  if ("leave_end_date" in body && body.leave_end_date !== null) {
+    if (typeof body.leave_end_date !== "string" || !DATE_RE.test(body.leave_end_date)) {
+      return NextResponse.json({ error: "leave_end_date must be a YYYY-MM-DD date string or null" }, { status: 400 });
+    }
+  }
+  if (
+    body.leave_start_date && body.leave_end_date &&
+    body.leave_start_date > body.leave_end_date
+  ) {
+    return NextResponse.json({ error: "leave_start_date must not be later than leave_end_date" }, { status: 400 });
+  }
+
   await db
     .update(shop_config)
     .set({
@@ -100,6 +131,11 @@ export async function POST(req: NextRequest) {
         min_order_amount: String(body.min_order_amount),
       }),
       ...(body.covered_areas !== undefined && { covered_areas: body.covered_areas }),
+      // Leave-mode (R7)
+      ...(body.is_on_leave !== undefined && { is_on_leave: body.is_on_leave }),
+      ...("leave_start_date" in body && { leave_start_date: body.leave_start_date ?? null }),
+      ...("leave_end_date" in body && { leave_end_date: body.leave_end_date ?? null }),
+      ...("leave_message" in body && { leave_message: body.leave_message ?? null }),
     })
     .where(eq(shop_config.id, config.id));
 

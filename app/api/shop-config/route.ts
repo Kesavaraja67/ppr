@@ -32,5 +32,10 @@ export async function GET() {
           "Thoppampatti Pirivu",
           "Maruthi Nagar",
         ],
+    // Leave-mode banner fields (R7)
+    is_on_leave: config.is_on_leave ?? false,
+    leave_start_date: config.leave_start_date ?? null,
+    leave_end_date: config.leave_end_date ?? null,
+    leave_message: config.leave_message ?? null,
   });
 }

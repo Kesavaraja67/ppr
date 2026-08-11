@@ -4,7 +4,7 @@
  * Lookup is case-insensitive by normalized English name.
  *
  * Used by the admin "Add New Vegetable" form to auto-fill the Tamil name field.
- * If a name is not found here, admin enters Tamil manually — no paid API is called.
+ * If a name is not found here, the translate API route is called as a fallback.
  */
 
 const DICT: Record<string, string> = {
@@ -127,16 +127,37 @@ const DICT: Record<string, string> = {
   "tamarind":           "புளி",
 };
 
+// ── Reverse map (Tamil → English) built once at module load ──────────────────
+// For Tamil names that map to multiple English names, the first English key wins.
+const REVERSE_DICT: Record<string, string> = (() => {
+  const rev: Record<string, string> = {};
+  for (const [en, ta] of Object.entries(DICT)) {
+    if (!rev[ta]) rev[ta] = en;
+  }
+  return rev;
+})();
+
 /**
  * Look up the Tamil name for an English vegetable/fruit name.
- * Returns undefined if not found — admin should enter manually in that case.
+ * Case-insensitive, collapses extra whitespace.
+ * Returns undefined if not found.
  */
 export function lookupTamilName(nameEn: string): string | undefined {
-  const key = nameEn.toLowerCase().trim();
+  const key = nameEn.toLowerCase().trim().replace(/\s+/g, " ");
   return DICT[key];
 }
 
 /** Returns all entries for testing / admin preview. */
 export function getAllDictEntries(): Record<string, string> {
   return { ...DICT };
+}
+
+/**
+ * Look up the English name for a Tamil vegetable/fruit name.
+ * Returns undefined if not found.
+ */
+export function lookupEnglishName(nameTa: string): string | undefined {
+  // Normalize: trim and collapse internal whitespace to match REVERSE_DICT keys.
+  const normalized = nameTa.trim().replace(/\s+/g, " ");
+  return REVERSE_DICT[normalized];
 }

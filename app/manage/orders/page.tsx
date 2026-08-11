@@ -216,7 +216,11 @@ export default function AdminOrdersPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "20px" }}>
         <div>
-          <a href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280" }}>← Dashboard</a>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Link href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280", textDecoration: "none" }}>← Dashboard</Link>
+            <span style={{ fontSize: "0.8rem", color: "#d1d5db" }}>•</span>
+            <Link href="/" style={{ fontSize: "0.8rem", color: "#166534", fontWeight: 600, textDecoration: "none" }}>View Store</Link>
+          </div>
           <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginTop: "4px" }}>
             Tomorrow&apos;s Orders
           </h1>

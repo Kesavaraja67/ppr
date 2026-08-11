@@ -30,6 +30,7 @@ async function isAddressWithinDeliveryRange(
 
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const correlationId = req.headers.get("x-request-id") ?? crypto.randomUUID();
   const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
 
   // Enforce ordering hours: 8 AM–8 PM IST
   if (!isWithinOrderWindow()) {
+    console.error("[orders] Rejected: outside order window", { clientRequestId: correlationId });
     return NextResponse.json(
       { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
       { status: 403 }
@@ -63,12 +65,42 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.items || body.items.length === 0) {
+    console.error("[orders] Rejected: empty items", { clientRequestId: body.client_request_id ?? null });
     return NextResponse.json({ error: "Order must have at least one item" }, { status: 400 });
   }
 
-  // Fetch shop config for minimum order threshold
-  const [shopConf] = await db.select({ min_order_amount: shop_config.min_order_amount }).from(shop_config).limit(1);
+  // Fetch shop config for minimum order threshold and leave state
+  const [shopConf] = await db.select({
+    min_order_amount: shop_config.min_order_amount,
+    is_on_leave: shop_config.is_on_leave,
+    leave_start_date: shop_config.leave_start_date,
+    leave_end_date: shop_config.leave_end_date,
+  }).from(shop_config).limit(1);
   const minOrderVal = shopConf ? Number(shopConf.min_order_amount) : 500;
+
+  // Enforce leave mode: reject orders when the shop is on leave for today's date
+  if (shopConf?.is_on_leave) {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = parts.find((p) => p.type === "year")?.value ?? "";
+    const m = parts.find((p) => p.type === "month")?.value ?? "";
+    const d = parts.find((p) => p.type === "day")?.value ?? "";
+    const today = `${y}-${m}-${d}`;
+
+    const afterStart = !shopConf.leave_start_date || today >= shopConf.leave_start_date;
+    const beforeEnd = !shopConf.leave_end_date || today <= shopConf.leave_end_date;
+    if (afterStart && beforeEnd) {
+      console.error("[orders] Rejected: shop on leave", { date: today, clientRequestId: correlationId });
+      return NextResponse.json(
+        { error: "The shop is temporarily closed and not accepting orders right now. Please try again when we reopen." },
+        { status: 503 }
+      );
+    }
+  }
 
   // Verify all vegetable IDs exist, are in stock, and check unit / mode permissions
   const vegIds = body.items.map((i) => i.veg_id);
@@ -137,6 +169,11 @@ export async function POST(req: NextRequest) {
 
   // Hard-block server-side ONLY when all items are priced and estimated subtotal < minOrderVal
   if (allItemsHavePrices && pricedSubtotalAmount < minOrderVal) {
+    console.error("[orders] Rejected: min order not met", {
+      clientRequestId: body.client_request_id ?? null,
+      subtotal: pricedSubtotalAmount,
+      minRequired: minOrderVal,
+    });
     return NextResponse.json(
       { error: `Minimum order value of ₹${minOrderVal} is required. Please add more items to your order.` },
       { status: 422 }
@@ -148,18 +185,19 @@ export async function POST(req: NextRequest) {
 
   if (body.new_address) {
     // Recompute delivery-zone check server-side — never trust the client value
-    const { withinRange } = await isAddressWithinDeliveryRange(
+    const { withinRange, radiusKm } = await isAddressWithinDeliveryRange(
       body.new_address.lat,
       body.new_address.long,
       false
     );
 
     if (!withinRange) {
+      console.error("[orders] Rejected: new address outside delivery zone", {
+        clientRequestId: body.client_request_id ?? correlationId,
+        radiusKm,
+      });
       return NextResponse.json(
-        {
-          error:
-            "Outside our delivery zone. Please call the shop to discuss options.",
-        },
+        { error: "Outside our delivery zone. Please call the shop to discuss options." },
         { status: 422 }
       );
     }
@@ -187,17 +225,25 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (!addr) {
+      console.error("[orders] Rejected: address not found or not owned by user", {
+        clientRequestId: body.client_request_id ?? null,
+      });
       return NextResponse.json({ error: "Address not found" }, { status: 404 });
     }
 
     // Re-verify delivery range server-side against current shop config.
-    const { withinRange: withinRangeNow } = await isAddressWithinDeliveryRange(
+    const { withinRange: withinRangeNow, radiusKm: savedRadiusKm } = await isAddressWithinDeliveryRange(
       Number(addr.lat),
       Number(addr.long),
       addr.is_within_range
     );
 
     if (!withinRangeNow) {
+      console.error("[orders] Rejected: saved address now outside delivery zone", {
+        clientRequestId: body.client_request_id ?? correlationId,
+        addressId: body.address_id,
+        radiusKm: savedRadiusKm,
+      });
       // Self-heal stale flag so the UI reflects reality on next fetch
       if (addr.is_within_range) {
         await db

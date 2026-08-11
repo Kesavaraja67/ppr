@@ -5,13 +5,14 @@
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
-    "start": "next start",
+    "start": "npm run db:migrate:leave && next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
     "db:push": "drizzle-kit push",
     "db:seed": "tsx drizzle/seed.ts",
     "db:seed-vegs": "tsx drizzle/seed-bulk-vegetables.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:migrate:leave": "tsx drizzle/migrate-add-leave.ts"
   },
   "dependencies": {
     "@fontsource/noto-sans-tamil": "^5.3.0",
@@ -39,6 +40,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
+    "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }

@@ -5,7 +5,7 @@ const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB byte cap
 
 /**
  * Helper to generate a photorealistic produce photo using Pollinations AI
- * as a seamless fallback when Gemini Imagen 3 returns 404/502 on free API keys.
+ * as a seamless fallback when Gemini Imagen returns 404/502 on free API keys.
  */
 async function generateFallbackAIImage(prompt: string): Promise<string | null> {
   try {
@@ -44,15 +44,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { name_en?: string; name_ta?: string; category?: string };
+  let body: { name_en?: string; name_ta?: string; category?: string } | null = null;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { name_en } = body;
-  const trimmedName = name_en?.trim();
+  if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.name_en !== "string") {
+    return NextResponse.json(
+      { error: "name_en is required for image generation" },
+      { status: 400 }
+    );
+  }
+
+  const trimmedName = body.name_en.trim();
   if (!trimmedName) {
     return NextResponse.json(
       { error: "name_en is required for image generation" },
@@ -75,7 +81,7 @@ export async function POST(req: NextRequest) {
   if (apiKey) {
     try {
       let res = await fetch(
-        "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict",
+        "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-001:predict",
         {
           method: "POST",
           headers: {
@@ -100,9 +106,9 @@ export async function POST(req: NextRequest) {
         if (base64Image) imageDataUrl = `data:image/png;base64,${base64Image}`;
       } else {
         await res.text().catch(() => {}); // Consume body stream before retrying
-        // Retry with generateImages endpoint using header authentication
+        // Retry with imagen-3.0-fast-generate-001 endpoint
         res = await fetch(
-          "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages",
+          "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-fast-generate-001:predict",
           {
             method: "POST",
             headers: {
@@ -110,9 +116,9 @@ export async function POST(req: NextRequest) {
               "x-goog-api-key": apiKey,
             },
             body: JSON.stringify({
-              prompt,
-              config: {
-                numberOfImages: 1,
+              instances: [{ prompt }],
+              parameters: {
+                sampleCount: 1,
                 aspectRatio: "1:1",
                 outputMimeType: "image/png",
               },
@@ -122,7 +128,7 @@ export async function POST(req: NextRequest) {
         );
         if (res.ok) {
           const data = await res.json();
-          const base64Image = data?.generatedImages?.[0]?.image?.imageBytes ?? data?.predictions?.[0]?.bytesBase64Encoded;
+          const base64Image = data?.predictions?.[0]?.bytesBase64Encoded ?? data?.generatedImages?.[0]?.image?.imageBytes;
           if (base64Image) imageDataUrl = `data:image/png;base64,${base64Image}`;
         }
       }

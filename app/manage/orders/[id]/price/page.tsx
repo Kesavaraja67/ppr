@@ -13,6 +13,7 @@ interface OrderItem {
   name_en: string | null;
   name_ta: string | null;
   category: string | null;
+  catalog_price?: string | null;
 }
 
 interface Order {
@@ -83,12 +84,15 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
       .then((d) => {
         setOrder(d.order);
         setItems(d.items ?? []);
-        // Pre-fill existing prices if already priced
-        const existing: Record<string, string> = {};
+        // Pre-fill price inputs with existing prices or catalog reference prices
+        const initialPrices: Record<string, string> = {};
         for (const item of d.items ?? []) {
-          if (item.price_per_unit) existing[item.id] = item.price_per_unit;
+          const val = item.price_per_unit ?? item.catalog_price;
+          if (val !== null && val !== undefined && val !== "") {
+            initialPrices[item.id] = String(val);
+          }
         }
-        setPrices(existing);
+        setPrices(initialPrices);
         // Show PDF actions immediately if the order is already finalized
         const finalizedStatuses = ["priced", "dispatched", "delivered", "completed"];
         if (finalizedStatuses.includes(d.order?.status)) setSaved(true);

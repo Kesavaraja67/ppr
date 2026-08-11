@@ -75,7 +75,7 @@ export async function POST(
     line_total: number;
   }> = [];
 
-  await db.transaction(async (tx) => {
+  try {
     for (const item of items) {
       const pricePerUnit = priceMap.get(item.id);
       if (pricePerUnit === undefined || pricePerUnit === null) {
@@ -86,7 +86,7 @@ export async function POST(
       const qty = Number(item.requested_qty);
       const lineTotal = pricePerUnit * qty;
 
-      await tx
+      await db
         .update(order_items)
         .set({
           price_per_unit: String(pricePerUnit),
@@ -102,7 +102,7 @@ export async function POST(
 
     const delivery = computeDeliveryCharge(pricedLines, deliveryConfig);
 
-    await tx
+    await db
       .update(orders)
       .set({
         status: "priced",
@@ -112,7 +112,10 @@ export async function POST(
         priced_at: new Date(),
       })
       .where(eq(orders.id, orderId));
-  });
+  } catch (err) {
+    console.error("[price-order] Error saving prices:", err);
+    return NextResponse.json({ error: "Failed to save prices" }, { status: 500 });
+  }
 
   // Reload for response
   const [updatedOrder] = await db
@@ -132,6 +135,7 @@ export async function POST(
       name_en: vegetables.name_en,
       name_ta: vegetables.name_ta,
       category: vegetables.category,
+      catalog_price: vegetables.current_price,
     })
     .from(order_items)
     .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))
@@ -174,6 +178,7 @@ export async function GET(
       name_en: vegetables.name_en,
       name_ta: vegetables.name_ta,
       category: vegetables.category,
+      catalog_price: vegetables.current_price,
     })
     .from(order_items)
     .leftJoin(vegetables, eq(order_items.veg_id, vegetables.id))

@@ -271,21 +271,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Address is required" }, { status: 400 });
   }
 
-  // Compute next-day delivery date (IST)
-  const nowIST = new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-  );
-  const tomorrow = new Date(nowIST);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const deliveryDate = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+  // Compute next-day delivery date and cancellable_until cutoff in IST timezone
+  const istParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
 
-  // Cancellable until 8:00 PM today (IST) = 20:00 IST
-  const cancellableUntilIST = new Date(
-    `${nowIST.getFullYear()}-${String(nowIST.getMonth() + 1).padStart(2, "0")}-${String(nowIST.getDate()).padStart(2, "0")}T20:00:00+05:30`
-  );
-  // If it's already past 8 PM, order can't be cancelled (cutoff passed immediately)
-  // We still allow order creation, just with cancellable_until in the past
-  const cancellableUntil = cancellableUntilIST;
+  const y = Number(istParts.find((p) => p.type === "year")?.value);
+  const m = Number(istParts.find((p) => p.type === "month")?.value);
+  const d = Number(istParts.find((p) => p.type === "day")?.value);
+
+  // Tomorrow IST
+  const tomorrowUtc = new Date(Date.UTC(y, m - 1, d + 1));
+  const delY = tomorrowUtc.getUTCFullYear();
+  const delM = String(tomorrowUtc.getUTCMonth() + 1).padStart(2, "0");
+  const delD = String(tomorrowUtc.getUTCDate()).padStart(2, "0");
+  const deliveryDate = `${delY}-${delM}-${delD}`;
+
+  // Cancellable until 8:00 PM today (IST) = 20:00:00+05:30
+  const strM = String(m).padStart(2, "0");
+  const strD = String(d).padStart(2, "0");
+  const cancellableUntil = new Date(`${y}-${strM}-${strD}T20:00:00+05:30`);
 
   // Save customer name if provided (upsert on users.name)
   const trimmedName = body.name?.trim();

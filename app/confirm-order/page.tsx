@@ -175,7 +175,7 @@ function ConfirmOrderContent() {
       .catch(() => { });
 
     // Fetch fresh vegetable catalog prices for revalidating minimum order
-    fetch("/api/admin/vegetables-list")
+    fetch("/api/vegetables")
       .then((r) => r.json())
       .then((d) => {
         if (Array.isArray(d.vegetables)) {

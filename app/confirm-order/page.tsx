@@ -141,7 +141,11 @@ function ConfirmOrderContent() {
   }, [showOnboarding, onboardingStep, resetVerification]);
 
   function isWithinOrderWindow(): boolean {
-    return true; // Temporarily allow orders 24/7
+    const nowIST = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const h = nowIST.getHours();
+    return h >= 8 && h < 20;
   }
 
   const [freshPrices, setFreshPrices] = useState<Map<string, string | null>>(new Map());

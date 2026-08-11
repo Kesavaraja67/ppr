@@ -7,7 +7,11 @@ import { haversineDistance } from "@/lib/haversine";
 
 /** True when current IST time is within the 8 AM–8 PM ordering window. */
 function isWithinOrderWindow(): boolean {
-  return true; // Temporarily allow orders 24/7
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  const h = nowIST.getHours();
+  return h >= 8 && h < 20;
 }
 
 /** Helper to check if given lat/long coordinates are within shop delivery range */

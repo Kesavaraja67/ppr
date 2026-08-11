@@ -1822,10 +1822,11 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                 alignItems: "center",
               }}
             >
-              {runningSubtotalCents > 0 && (
-                <span>₹{runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)} · </span>
-              )}
-              <span>{totalCount} {totalCount === 1 ? "item" : "items"}</span>
+              {totalCount} {totalCount === 1 ? "item" : "items"}
+              {runningSubtotalCents > 0 &&
+                ` - ${items.some((i) => i.unit === "piece") ? "Est. " : ""}Rs. ${
+                  runningSubtotal % 1 === 0 ? runningSubtotal.toFixed(0) : runningSubtotal.toFixed(2)
+                }`}
             </span>
           </button>
         </div>

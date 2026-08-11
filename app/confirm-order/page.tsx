@@ -916,7 +916,8 @@ function ConfirmOrderContent() {
       </button>
 
       {/* 2-Step Onboarding Modal for First-Time / Logged-Out Users */}
-      {showOnboarding && (
+      {!loggedIn && showOnboarding && (
+        <Msg91WidgetProvider>
         <div
           role="dialog"
           aria-modal="true"
@@ -1090,15 +1091,12 @@ function ConfirmOrderContent() {
             )}
           </div>
         </div>
+        </Msg91WidgetProvider>
       )}
     </div>
   );
 }
 
 export default function ConfirmOrderPage() {
-  return (
-    <Msg91WidgetProvider>
-      <ConfirmOrderContent />
-    </Msg91WidgetProvider>
-  );
+  return <ConfirmOrderContent />;
 }

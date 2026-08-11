@@ -335,32 +335,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Create order + order_items in a single transaction
-    const result = await db.transaction(async (tx) => {
-      const [order] = await tx
-        .insert(orders)
-        .values({
-          user_id: session.userId,
-          address_id: addressId,
-          delivery_date: deliveryDate,
-          cancellable_until: cancellableUntil,
-          client_request_id: body.client_request_id || null,
-        })
-        .returning({ id: orders.id });
+    // Create order + order_items (neon-http compatible sequential insert)
+    const [order] = await db
+      .insert(orders)
+      .values({
+        user_id: session.userId,
+        address_id: addressId,
+        delivery_date: deliveryDate,
+        cancellable_until: cancellableUntil,
+        client_request_id: body.client_request_id || null,
+      })
+      .returning({ id: orders.id });
 
-      await tx.insert(order_items).values(
-        body.items.map((item) => ({
-          order_id: order.id,
-          veg_id: item.veg_id,
-          requested_qty: String(item.qty),
-          unit: item.unit || vegMap.get(item.veg_id)?.unit || "kg",
-        }))
-      );
+    await db.insert(order_items).values(
+      body.items.map((item) => ({
+        order_id: order.id,
+        veg_id: item.veg_id,
+        requested_qty: String(item.qty),
+        unit: item.unit || vegMap.get(item.veg_id)?.unit || "kg",
+      }))
+    );
 
-      return order;
-    });
-
-    return NextResponse.json({ orderId: result.id }, { status: 201 });
+    return NextResponse.json({ orderId: order.id }, { status: 201 });
   } catch (err: unknown) {
     console.error("Order creation handler error:", err);
     const errorMessage = err instanceof Error ? err.message : "Failed to create order. Please try again.";

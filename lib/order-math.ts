@@ -48,7 +48,7 @@ export function computeSubtotalCents(
       return sum;
     }
     const priceCents = Math.round(Number(priceStr) * 100);
-    return sum + priceCents * item.qty;
+    return sum + Math.round(priceCents * item.qty);
   }, 0);
 }
 

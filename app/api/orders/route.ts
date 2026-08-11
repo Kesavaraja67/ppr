@@ -30,6 +30,7 @@ async function isAddressWithinDeliveryRange(
 
 // ─── POST /api/orders — create a new order ────────────────────────────────────
 export async function POST(req: NextRequest) {
+  const correlationId = req.headers.get("x-request-id") ?? crypto.randomUUID();
   const session = await getCustomerSession();
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
   // Enforce ordering hours: 8 AM–8 PM IST
   if (!isWithinOrderWindow()) {
-    console.error("[orders] Rejected: outside order window", { clientRequestId: null });
+    console.error("[orders] Rejected: outside order window", { clientRequestId: correlationId });
     return NextResponse.json(
       { error: "Orders are only accepted between 8 AM and 8 PM. Please try again during shop hours." },
       { status: 403 }
@@ -79,11 +80,21 @@ export async function POST(req: NextRequest) {
 
   // Enforce leave mode: reject orders when the shop is on leave for today's date
   if (shopConf?.is_on_leave) {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(new Date());
+    const y = parts.find((p) => p.type === "year")?.value ?? "";
+    const m = parts.find((p) => p.type === "month")?.value ?? "";
+    const d = parts.find((p) => p.type === "day")?.value ?? "";
+    const today = `${y}-${m}-${d}`;
+
     const afterStart = !shopConf.leave_start_date || today >= shopConf.leave_start_date;
     const beforeEnd = !shopConf.leave_end_date || today <= shopConf.leave_end_date;
     if (afterStart && beforeEnd) {
-      console.error("[orders] Rejected: shop on leave", { date: today });
+      console.error("[orders] Rejected: shop on leave", { date: today, clientRequestId: correlationId });
       return NextResponse.json(
         { error: "The shop is temporarily closed and not accepting orders right now. Please try again when we reopen." },
         { status: 503 }
@@ -174,7 +185,7 @@ export async function POST(req: NextRequest) {
 
   if (body.new_address) {
     // Recompute delivery-zone check server-side — never trust the client value
-    const { withinRange } = await isAddressWithinDeliveryRange(
+    const { withinRange, radiusKm } = await isAddressWithinDeliveryRange(
       body.new_address.lat,
       body.new_address.long,
       false
@@ -182,8 +193,8 @@ export async function POST(req: NextRequest) {
 
     if (!withinRange) {
       console.error("[orders] Rejected: new address outside delivery zone", {
-        clientRequestId: body.client_request_id ?? null,
-        radiusKm: null, // available from isAddressWithinDeliveryRange result if needed
+        clientRequestId: body.client_request_id ?? correlationId,
+        radiusKm,
       });
       return NextResponse.json(
         { error: "Outside our delivery zone. Please call the shop to discuss options." },
@@ -221,7 +232,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Re-verify delivery range server-side against current shop config.
-    const { withinRange: withinRangeNow } = await isAddressWithinDeliveryRange(
+    const { withinRange: withinRangeNow, radiusKm: savedRadiusKm } = await isAddressWithinDeliveryRange(
       Number(addr.lat),
       Number(addr.long),
       addr.is_within_range
@@ -229,8 +240,9 @@ export async function POST(req: NextRequest) {
 
     if (!withinRangeNow) {
       console.error("[orders] Rejected: saved address now outside delivery zone", {
-        clientRequestId: body.client_request_id ?? null,
+        clientRequestId: body.client_request_id ?? correlationId,
         addressId: body.address_id,
+        radiusKm: savedRadiusKm,
       });
       // Self-heal stale flag so the UI reflects reality on next fetch
       if (addr.is_within_range) {

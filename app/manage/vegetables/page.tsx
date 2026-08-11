@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { lookupTamilName, lookupEnglishName } from "@/lib/tamil-dict";
 
 interface Vegetable {
@@ -310,6 +311,10 @@ export default function AdminVegetablesPage() {
   };
 
   const startEdit = (veg: Vegetable) => {
+    formSessionRef.current += 1;
+    setGenerating(false);
+    setTaTranslating(false);
+    setEnTranslating(false);
     setEditingVeg(veg);
     setNameEn(veg.name_en);
     setNameTa(veg.name_ta);
@@ -337,6 +342,9 @@ export default function AdminVegetablesPage() {
     setTaAutoFilled(false);
     setEnAutoFilled(false);
     setImageGenError("");
+    setGenerating(false);
+    setTaTranslating(false);
+    setEnTranslating(false);
     if (enDebounceRef.current) clearTimeout(enDebounceRef.current);
     if (taDebounceRef.current) clearTimeout(taDebounceRef.current);
     // Increment session so any in-flight translation or image-gen responses
@@ -709,9 +717,9 @@ export default function AdminVegetablesPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <a href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280", textDecoration: "none" }}>← Dashboard</a>
+            <Link href="/manage/stock" style={{ fontSize: "0.8rem", color: "#6b7280", textDecoration: "none" }}>← Dashboard</Link>
             <span style={{ fontSize: "0.8rem", color: "#d1d5db" }}>•</span>
-            <a href="/" style={{ fontSize: "0.8rem", color: "#166534", fontWeight: 600, textDecoration: "none" }}>View Store</a>
+            <Link href="/" style={{ fontSize: "0.8rem", color: "#166534", fontWeight: 600, textDecoration: "none" }}>View Store</Link>
           </div>
           <h1 style={{ fontSize: "1.2rem", fontWeight: 700, marginTop: "4px" }}>Manage Items</h1>
         </div>

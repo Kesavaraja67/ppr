@@ -52,6 +52,7 @@ export function useMsg91Widget(captchaRenderId: string) {
 
     const cleanup = () => {
       disposed = true;
+      initialized.current = false;
       resetMsg91Captcha(captchaRenderId);
     };
 
@@ -117,6 +118,8 @@ export function useMsg91Widget(captchaRenderId: string) {
         runInit();
       };
       existing.onerror = () => {
+        initialized.current = false;
+        existing.remove();
         if (!disposed) setWidgetError("Failed to load OTP service script.");
       };
       return cleanup;
@@ -130,6 +133,8 @@ export function useMsg91Widget(captchaRenderId: string) {
       runInit();
     };
     script.onerror = () => {
+      initialized.current = false;
+      script.remove();
       if (!disposed) setWidgetError("Failed to load OTP service script.");
     };
     document.body.appendChild(script);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function ManageLoginPage() {
   const router = useRouter();
@@ -71,7 +72,7 @@ export default function ManageLoginPage() {
       <div style={{ width: "100%", maxWidth: "360px" }}>
         {/* Navigation link to public store */}
         <div style={{ marginBottom: "20px" }}>
-          <a
+          <Link
             href="/"
             style={{
               display: "inline-flex",
@@ -82,7 +83,7 @@ export default function ManageLoginPage() {
               fontWeight: 600,
               textDecoration: "none",
               background: "#F0FDF4",
-              border: "1px solid #BBF7D0",
+              border: "1.5px solid #BBF7D0",
               padding: "6px 12px",
               borderRadius: "9999px",
             }}
@@ -92,7 +93,7 @@ export default function ManageLoginPage() {
               <polyline points="12 19 5 12 12 5" />
             </svg>
             Back to Store
-          </a>
+          </Link>
         </div>
 
         {/* Logo area */}

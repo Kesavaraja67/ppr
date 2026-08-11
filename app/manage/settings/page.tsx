@@ -172,7 +172,14 @@ export default function AdminSettingsPage() {
           />
           <div>
             <p style={{ fontSize: "0.88rem", fontWeight: 700, color: config.is_on_leave ? "#92400e" : "#374151" }}>
-              {config.is_on_leave ? "🔴 Shop is currently on leave" : "Shop is open — toggle to enable leave banner"}
+              {config.is_on_leave ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ width: "8px", height: "8px", borderRadius: "50%", background: "#DC2626", display: "inline-block" }} />
+                  Shop is currently on leave
+                </span>
+              ) : (
+                "Shop is open — toggle to enable leave banner"
+              )}
             </p>
             <p style={{ fontSize: "0.72rem", color: "#9ca3af", marginTop: "2px" }}>
               Customers will see the leave banner on every page when this is on.

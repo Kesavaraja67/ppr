@@ -51,6 +51,27 @@ function CloseIcon() {
   );
 }
 
+function TruckIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <rect x="1" y="3" width="15" height="13" rx="2" />
+      <polygon points="16 8 20 8 23 11 23 16 16 16 8" />
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
 function ConfirmOrderContent() {
   const router = useRouter();
   const { items, removeItem, clearAll } = useOrderList();
@@ -795,8 +816,8 @@ function ConfirmOrderContent() {
             gap: "6px",
           }}
         >
-          <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#166534", margin: 0 }}>
-            🚚 Delivery Information
+          <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "#166534", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+            <TruckIcon /> Delivery Information
           </p>
           <p style={{ fontSize: "0.78rem", color: "#374151", margin: 0, lineHeight: 1.5 }}>
             Vegetables only: free above ₹{deliveryInfo.vegThreshold}
@@ -825,8 +846,8 @@ function ConfirmOrderContent() {
               marginBottom: "16px",
             }}
           >
-            <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#DC2626", margin: 0 }}>
-              ⚠️ Minimum Order Value: ₹{minOrderAmount}
+            <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#DC2626", margin: 0, display: "flex", alignItems: "center", gap: "6px" }}>
+              <AlertTriangleIcon /> Minimum Order Value: ₹{minOrderAmount}
             </p>
             <p style={{ fontSize: "0.8rem", color: "#991B1B", margin: "4px 0 0", lineHeight: 1.4 }}>
               Cart estimated total is ₹{estimatedSubtotal.toFixed(0)}. Please add ₹{minOrderGap.toFixed(0)} more of priced items to reach the ₹{minOrderAmount} minimum.

@@ -22,8 +22,7 @@ export async function GET() {
         image_url: vegetables.image_url,
       })
       .from(vegetables)
-      .where(eq(vegetables.in_stock, true))
-      .orderBy(asc(vegetables.name_en));
+      .where(eq(vegetables.in_stock, true));
 
     return NextResponse.json({ vegetables: vegs });
   } catch (err) {

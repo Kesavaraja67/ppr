@@ -107,6 +107,29 @@ function ShareSquareIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function ScaleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "6px" }}>
+      <path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+      <path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z" />
+      <path d="M7 21h10" />
+      <path d="M12 3v18" />
+      <path d="M3 7h18" />
+    </svg>
+  );
+}
+
+function PieceIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ display: "inline-block", verticalAlign: "middle", marginRight: "6px" }}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
+
 function PinIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -313,7 +336,7 @@ function formatWeightDisplay(kg: number): string {
   const grams = Math.round(kg * 1000);
   if (kg >= 1) {
     const formattedKg = Number.isInteger(kg) ? String(kg) : String(parseFloat(kg.toFixed(2)));
-    return `${grams}g / ${formattedKg}kg`;
+    return `${formattedKg}kg`;
   }
   return `${grams}g`;
 }
@@ -401,7 +424,8 @@ function KgInputBar({
             debounceRef.current = setTimeout(() => {
               const { kg, isValid } = parseRawWeightInput(raw);
               if (isValid) {
-                onQuantityChange(kg);
+                const normalizedKg = Math.round(kg * 1000) / 1000;
+                onQuantityChange(normalizedKg);
               }
             }, 200);
           }}
@@ -428,16 +452,29 @@ function KgInputBar({
             background: "transparent",
             border: "none",
             outline: "none",
-            fontSize: "16px",
+            fontSize: "15px",
             fontWeight: 700,
             color: "#111827",
             fontFamily: "var(--font)",
             MozAppearance: "textfield",
             WebkitAppearance: "none",
-            padding: "0 2px",
+            padding: "0 4px",
           }}
         />
-        {weightLabel && (
+        {isFocused ? (
+          <span
+            style={{
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              color: "#15803D",
+              padding: "2px 4px",
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
+            kg/g
+          </span>
+        ) : weightLabel ? (
           <span
             style={{
               fontSize: "0.68rem",
@@ -453,7 +490,7 @@ function KgInputBar({
           >
             {weightLabel}
           </span>
-        )}
+        ) : null}
       </div>
 
       <button
@@ -799,6 +836,28 @@ function ProductCard({
               onIncrement={handleIncrementPiece}
             />
           )
+        ) : qty > 0 ? (
+          <button
+            onClick={() => setQty(veg.id, 0)}
+            style={{
+              width: "100%",
+              height: "40px",
+              background: "#FEF2F2",
+              color: "#DC2626",
+              border: "1.5px solid #FECACA",
+              borderRadius: "9999px",
+              fontFamily: "var(--font)",
+              fontWeight: 600,
+              fontSize: "0.8rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            <CloseIcon /> Remove from Cart
+          </button>
         ) : (
           <button
             disabled
@@ -1051,10 +1110,12 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
               const freshMap = new Map<string, Vegetable>();
               data.vegetables.forEach((v: Vegetable) => freshMap.set(v.id, v));
 
-              // Update prices and stock status on existing items
-              return prev.map((v) => {
-                const fresh = freshMap.get(v.id);
-                if (fresh) {
+              // Preserve the initial priority sorting order (established by app/page.tsx)
+              // while updating live prices, stock status, and active items in place.
+              const updatedExisting = prev
+                .filter((v) => freshMap.has(v.id))
+                .map((v) => {
+                  const fresh = freshMap.get(v.id)!;
                   return {
                     ...v,
                     current_price: fresh.current_price,
@@ -1065,9 +1126,13 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                     allow_piece_mode: fresh.allow_piece_mode,
                     image_url: fresh.image_url ?? v.image_url,
                   };
-                }
-                return v;
-              });
+                });
+
+              // Append any newly created items that weren't in prev
+              const existingIds = new Set(prev.map((v) => v.id));
+              const newItems = data.vegetables.filter((v: Vegetable) => !existingIds.has(v.id));
+
+              return [...updatedExisting, ...newItems];
             });
           }
         }
@@ -1962,7 +2027,9 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                   fontFamily: "var(--font)",
                 }}
               >
-                <span>⚖️ By Weight / எடை</span>
+                <span style={{ display: "flex", alignItems: "center" }}>
+                  <ScaleIcon /> By Weight / எடை
+                </span>
                 <span style={{ fontSize: "0.72rem", background: "#DCFCE7", padding: "4px 8px", borderRadius: "9999px" }}>
                   g / kg
                 </span>
@@ -2001,7 +2068,9 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
                     fontFamily: "var(--font)",
                   }}
                 >
-                  <span>🧩 By Piece / எண்ணிக்கை</span>
+                  <span style={{ display: "flex", alignItems: "center" }}>
+                    <PieceIcon /> By Piece / எண்ணிக்கை
+                  </span>
                   <span style={{ fontSize: "0.72rem", background: "#E5E7EB", padding: "4px 8px", borderRadius: "9999px" }}>
                     Count
                   </span>

@@ -5,10 +5,9 @@ import { headers } from "next/headers";
  * Helper to generate a photorealistic produce photo using Pollinations AI
  * as a seamless fallback when Gemini Imagen 3 returns 404/502 on free API keys.
  */
-async function generateFallbackAIImage(nameEn: string, category: string): Promise<string | null> {
+async function generateFallbackAIImage(prompt: string): Promise<string | null> {
   try {
-    const categoryLabel = category === "fruit" ? "fresh fruit" : category === "grocery" ? "grocery product" : "fresh vegetable";
-    const promptStr = encodeURIComponent(`high quality photorealistic e-commerce studio product photo of ${nameEn.trim()} ${categoryLabel} on plain white background isolated studio lighting`);
+    const promptStr = encodeURIComponent(prompt);
     const imageUrl = `https://image.pollinations.ai/prompt/${promptStr}?width=512&height=512&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
 
     const res = await fetch(imageUrl, { signal: AbortSignal.timeout(20_000) });
@@ -26,7 +25,7 @@ async function generateFallbackAIImage(nameEn: string, category: string): Promis
 /**
  * POST /api/admin/generate-image
  * Generates a product photo using Gemini Imagen with seamless AI fallback.
- * Admin-auth-gated. Returns { imageDataUrl } on success or { error } on failure.
+ * Uses one universal studio food photography prompt.
  */
 export async function POST(req: NextRequest) {
   const headersList = await headers();
@@ -42,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const { name_en, name_ta, category = "vegetable" } = body;
+  const { name_en } = body;
   if (!name_en?.trim()) {
     return NextResponse.json(
       { error: "name_en is required for image generation" },
@@ -50,15 +49,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const prompt = `Studio product photo of fresh ${name_en.trim()}, isolated on white background, food photography`;
   const apiKey = process.env.GEMINI_API_KEY;
   let imageDataUrl: string | null = null;
 
   // 1. Try Gemini Imagen 3 if API Key is configured
   if (apiKey) {
-    const categoryLabel = category === "fruit" ? "fruit" : category === "grocery" ? "grocery item" : "vegetable";
-    const tamilHint = name_ta?.trim() ? ` (also known as "${name_ta.trim()}" in Tamil)` : "";
-    const prompt = `A clean, well-lit product photo of fresh ${name_en.trim()}${tamilHint} on a plain white background. E-commerce style, top-down or 45-degree angle, no watermark, no text, photorealistic, high quality ${categoryLabel} produce photo.`;
-
     try {
       let res = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:generateImages?key=${apiKey}`,
@@ -112,7 +108,7 @@ export async function POST(req: NextRequest) {
 
   // 2. Seamless AI Fallback (works on free API keys when Imagen returns 404)
   if (!imageDataUrl) {
-    imageDataUrl = await generateFallbackAIImage(name_en, category);
+    imageDataUrl = await generateFallbackAIImage(prompt);
   }
 
   if (!imageDataUrl) {

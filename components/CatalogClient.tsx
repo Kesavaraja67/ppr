@@ -949,6 +949,13 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
 
   // Live produce catalog state — initialized with SSR data, updated live from API
   const [vegs, setVegs] = useState<Vegetable[]>(allVegs);
+  const [prevAllVegs, setPrevAllVegs] = useState<Vegetable[]>(allVegs);
+
+  // Render-phase state adjustment pattern (React recommended for prop-syncing)
+  if (prevAllVegs !== allVegs) {
+    setPrevAllVegs(allVegs);
+    setVegs(allVegs);
+  }
 
   const vegsPriceMap = useMemo(
     () => new Map<string, string | null>(vegs.map((v) => [v.id, v.current_price ?? null])),
@@ -1094,9 +1101,7 @@ export default function CatalogClient({ vegetables: allVegs, config }: Props) {
     }
   };
 
-  useEffect(() => {
-    setVegs(allVegs);
-  }, [allVegs]);
+
 
   // Re-fetch live produce prices & stock state periodically + on window focus
   useEffect(() => {

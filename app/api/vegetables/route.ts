@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { vegetables } from "@/drizzle/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 /**
  * GET /api/vegetables

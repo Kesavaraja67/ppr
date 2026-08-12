@@ -23,7 +23,9 @@ interface Order {
   subtotal: string | null;
   delivery_charge: string | null;
   total_amount: string | null;
-  user_phone?: string;
+  user_phone?: string | null;
+  user_name?: string | null;
+  address_text?: string | null;
 }
 
 // Builds plain text bill for 80mm thermal print bridge (RawBT / Web Share)
@@ -47,6 +49,7 @@ function generateTextBill(order: Order, items: OrderItem[], shopName: string) {
 ================================
 Delivery: ${order.delivery_date}
 Order #: ${order.id.slice(0, 8).toUpperCase()}
+Customer: ${order.user_name ?? 'N/A'}
 Phone: ${order.user_phone ?? 'N/A'}
 ================================
 ${rows}
@@ -249,173 +252,273 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="page-content" style={{ padding: "16px" }}>
-      {/* Print styles matching wholesale purchase list page */}
+      {/* Print styles: hides UI and shows dedicated receipt template on print */}
       <style>{`
+        .printable-receipt {
+          display: none;
+        }
         @media print {
           .no-print { display: none !important; }
-          body { background: #fff; }
+          body { background: #fff; margin: 0; padding: 0; }
           .page-content { padding: 0 !important; max-width: 100% !important; }
+          .printable-receipt {
+            display: block !important;
+            font-family: monospace, sans-serif;
+            width: 100%;
+            max-width: 320px;
+            margin: 0 auto;
+            color: #000;
+            font-size: 13px;
+            line-height: 1.4;
+          }
+          .receipt-divider {
+            border-top: 1px dashed #000;
+            margin: 8px 0;
+          }
+          .receipt-double-divider {
+            border-top: 2px solid #000;
+            margin: 8px 0;
+          }
         }
       `}</style>
 
-      <div className="no-print" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
-        <button onClick={() => router.back()} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>
-          ←
-        </button>
+      {/* Dedicated Printable Bill (Only visible during print) */}
+      <div className="printable-receipt">
+        <div style={{ textAlign: "center", marginBottom: "8px" }}>
+          <h2 style={{ fontSize: "16px", fontWeight: "bold", margin: 0, textTransform: "uppercase" }}>
+            {shopName}
+          </h2>
+          <p style={{ fontSize: "11px", margin: "2px 0" }}>Shop Contact: 63823 66080</p>
+        </div>
+
+        <div className="receipt-double-divider" />
+
+        <div style={{ fontSize: "12px" }}>
+          <div><strong>Order #:</strong> {order.id.slice(0, 8).toUpperCase()}</div>
+          <div><strong>Date:</strong> {order.delivery_date}</div>
+          <div><strong>Customer:</strong> {order.user_name ?? "N/A"}</div>
+          {order.user_phone && <div><strong>Phone:</strong> {order.user_phone}</div>}
+        </div>
+
+        <div className="receipt-divider" />
+
+        {/* Item List */}
         <div>
-          <h1 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Enter Prices</h1>
-          <p style={{ fontSize: "0.78rem", color: "#6b7280" }}>Delivery: {order.delivery_date}</p>
-        </div>
-      </div>
-
-      <p className="no-print" style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "16px" }}>
-        Enter today&apos;s market price for each item. Leave blank for items not available.
-      </p>
-
-      {/* Item pricing table */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
-        {items.map((item) => {
-          const price = prices[item.id] ?? "";
-          const lineTotal = price ? Number(price) * Number(item.requested_qty) : null;
-
-          return (
-            <div
-              key={item.id}
-              style={{
-                background: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: "10px",
-                padding: "12px 14px",
-              }}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                <div>
-                  <p style={{ fontWeight: 700, fontSize: "0.9rem" }}>{item.name_en}</p>
-                  <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>
-                    {item.name_ta} · {Number(item.requested_qty)} {item.unit} ordered
-                  </p>
-                </div>
-                {lineTotal !== null && (
-                  <p style={{ fontWeight: 700, color: "#166534", fontSize: "0.9rem" }}>
-                    ₹{lineTotal.toFixed(0)}
-                  </p>
-                )}
-              </div>
-
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span style={{ color: "#6b7280", fontSize: "0.9rem", flexShrink: 0 }}>₹ / {item.unit}</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="Price (leave blank if unavailable)"
-                  value={price}
-                  onChange={(e) => setPrices((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                  className="admin-input"
-                  style={{ flex: 1 }}
-                  min="0"
-                  step="0.5"
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Delivery charge preview */}
-      {preview && (
-        <div
-          style={{
-            background: "#f0fdf4",
-            border: "1px solid #bbf7d0",
-            borderRadius: "10px",
-            padding: "12px 14px",
-            marginBottom: "16px",
-            fontSize: "0.88rem",
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span>Subtotal</span>
-            <span style={{ fontWeight: 700 }}>₹{preview.subtotal.toFixed(2)}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-            <span>Delivery charge</span>
-            <span style={{ color: "#166534", fontWeight: 700 }}>
-              {preview.deliveryCharge === 0 ? "FREE" : `₹${preview.deliveryCharge.toFixed(2)}`}
-            </span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1rem", borderTop: "1px solid #bbf7d0", paddingTop: "8px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginBottom: "4px" }}>
+            <span>Item</span>
             <span>Total</span>
-            <span>₹{preview.total.toFixed(2)}</span>
+          </div>
+          {items.map((item) => {
+            const price = prices[item.id] ?? item.price_per_unit;
+            if (!price) return null;
+            const lineTotal = Number(price) * Number(item.requested_qty);
+            return (
+              <div key={item.id} style={{ marginBottom: "6px" }}>
+                <div style={{ fontWeight: "bold" }}>
+                  {item.name_en} {item.name_ta ? `(${item.name_ta})` : ""}
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#333", fontSize: "12px" }}>
+                  <span>
+                    {Number(item.requested_qty)} {item.unit} x ₹{Number(price).toFixed(2)}
+                  </span>
+                  <span style={{ fontWeight: "bold" }}>₹{lineTotal.toFixed(2)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="receipt-divider" />
+
+        {/* Totals */}
+        {preview && (
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Subtotal:</span>
+              <span>₹{preview.subtotal.toFixed(2)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <span>Delivery Charge:</span>
+              <span>{preview.deliveryCharge === 0 ? "FREE" : `₹${preview.deliveryCharge.toFixed(2)}`}</span>
+            </div>
+
+            <div className="receipt-double-divider" />
+
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "15px", fontWeight: "bold" }}>
+              <span>TOTAL AMOUNT:</span>
+              <span>₹{preview.total.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="receipt-double-divider" />
+
+        <div style={{ textAlign: "center", marginTop: "8px", fontSize: "11px" }}>
+          <div>Payment: Cash on Delivery</div>
+          <div style={{ fontWeight: "bold", marginTop: "4px" }}>Thank you for shopping!</div>
+        </div>
+      </div>
+
+      {/* Main Web UI (Hidden during print) */}
+      <div className="no-print">
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+          <button onClick={() => router.back()} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>
+            ←
+          </button>
+          <div>
+            <h1 style={{ fontSize: "1.1rem", fontWeight: 700 }}>Enter Prices</h1>
+            <p style={{ fontSize: "0.78rem", color: "#6b7280" }}>Delivery: {order.delivery_date}</p>
           </div>
         </div>
-      )}
 
-      {/* Actions */}
-      {!saved ? (
-        <button
-          className="btn-accent no-print"
-          style={{ width: "100%", justifyContent: "center", marginBottom: "10px" }}
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? "Saving…" : "Save & Finalise Bill"}
-        </button>
-      ) : (
-        <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <div style={{ display: "flex", gap: "10px" }}>
+        <p style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "16px" }}>
+          Enter today&apos;s market price for each item. Leave blank for items not available.
+        </p>
+
+        {/* Item pricing table */}
+        <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+          {items.map((item) => {
+            const price = prices[item.id] ?? "";
+            const lineTotal = price ? Number(price) * Number(item.requested_qty) : null;
+
+            return (
+              <div
+                key={item.id}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "10px",
+                  padding: "12px 14px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
+                  <div>
+                    <p style={{ fontWeight: 700, fontSize: "0.9rem" }}>{item.name_en}</p>
+                    <p style={{ color: "#6b7280", fontSize: "0.75rem" }}>
+                      {item.name_ta} · {Number(item.requested_qty)} {item.unit} ordered
+                    </p>
+                  </div>
+                  {lineTotal !== null && (
+                    <p style={{ fontWeight: 700, color: "#166534", fontSize: "0.9rem" }}>
+                      ₹{lineTotal.toFixed(0)}
+                    </p>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span style={{ color: "#6b7280", fontSize: "0.9rem", flexShrink: 0 }}>₹ / {item.unit}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    placeholder="Price (leave blank if unavailable)"
+                    value={price}
+                    onChange={(e) => setPrices((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                    className="admin-input"
+                    style={{ flex: 1 }}
+                    min="0"
+                    step="0.5"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Delivery charge preview */}
+        {preview && (
+          <div
+            style={{
+              background: "#f0fdf4",
+              border: "1px solid #bbf7d0",
+              borderRadius: "10px",
+              padding: "12px 14px",
+              marginBottom: "16px",
+              fontSize: "0.88rem",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span>Subtotal</span>
+              <span style={{ fontWeight: 700 }}>₹{preview.subtotal.toFixed(2)}</span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+              <span>Delivery charge</span>
+              <span style={{ color: "#166534", fontWeight: 700 }}>
+                {preview.deliveryCharge === 0 ? "FREE" : `₹${preview.deliveryCharge.toFixed(2)}`}
+              </span>
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: "1rem", borderTop: "1px solid #bbf7d0", paddingTop: "8px" }}>
+              <span>Total</span>
+              <span>₹{preview.total.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Actions */}
+        {!saved ? (
+          <button
+            className="btn-accent"
+            style={{ width: "100%", justifyContent: "center", marginBottom: "10px" }}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save & Finalise Bill"}
+          </button>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button
+                onClick={handleShare}
+                className="btn-accent"
+                style={{ flex: 1, justifyContent: "center" }}
+                disabled={sharing}
+              >
+                {sharing ? "Sharing…" : "Share Bill (PDF)"}
+              </button>
+              <button
+                onClick={handleDownloadPdf}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  border: "1.5px solid #166534",
+                  borderRadius: "9999px",
+                  background: "#f0fdf4",
+                  color: "#166534",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  textAlign: "center",
+                }}
+              >
+                Download PDF
+              </button>
+            </div>
             <button
-              onClick={handleShare}
-              className="btn-accent"
-              style={{ flex: 1, justifyContent: "center" }}
-              disabled={sharing}
-            >
-              {sharing ? "Sharing…" : "Share Bill (PDF)"}
-            </button>
-            <button
-              onClick={handleDownloadPdf}
+              onClick={handlePrint}
               style={{
-                flex: 1,
+                width: "100%",
                 padding: "14px",
                 border: "1.5px solid #166534",
                 borderRadius: "9999px",
-                background: "#f0fdf4",
-                color: "#166534",
+                background: "#166534",
+                color: "#fff",
                 fontWeight: 700,
                 cursor: "pointer",
                 textAlign: "center",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
               }}
             >
-              Download PDF
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 6 2 18 2 18 9" />
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                <rect x="6" y="14" width="12" height="8" />
+              </svg>
+              Print
             </button>
           </div>
-          <button
-            onClick={handlePrint}
-            style={{
-              width: "100%",
-              padding: "14px",
-              border: "1.5px solid #166534",
-              borderRadius: "9999px",
-              background: "#166534",
-              color: "#fff",
-              fontWeight: 700,
-              cursor: "pointer",
-              textAlign: "center",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 6 2 18 2 18 9" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print
-          </button>
-        </div>
-      )}
-
+        )}
+      </div>
     </div>
   );
 }

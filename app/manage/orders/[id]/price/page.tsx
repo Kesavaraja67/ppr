@@ -119,19 +119,26 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     if (!config) return null;
     let vegTotal = 0;
     let fruitTotal = 0;
+    let groceryTotal = 0;
+    let subtotal = 0;
+
     for (const item of items) {
       const p = Number(prices[item.id] ?? 0);
       const lineTotal = p * Number(item.requested_qty);
-      if (item.category === "vegetable") vegTotal += lineTotal;
-      else if (item.category === "fruit") fruitTotal += lineTotal;
+      if (lineTotal > 0) {
+        subtotal += lineTotal;
+        if (item.category === "vegetable") vegTotal += lineTotal;
+        else if (item.category === "fruit") fruitTotal += lineTotal;
+        else groceryTotal += lineTotal;
+      }
     }
-    const subtotal = vegTotal + fruitTotal;
     if (subtotal === 0) return null;
 
     const hasVeg = vegTotal > 0;
     const hasFruit = fruitTotal > 0;
+    const hasGrocery = groceryTotal > 0;
     let threshold: number;
-    if (hasVeg && hasFruit) threshold = config.mixed;
+    if (hasGrocery || (hasVeg && hasFruit)) threshold = config.mixed;
     else if (hasVeg) threshold = config.veg;
     else threshold = config.fruit;
 

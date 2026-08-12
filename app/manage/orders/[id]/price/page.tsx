@@ -303,28 +303,39 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         <div style={{ fontSize: "12px" }}>
           <div><strong>Order #:</strong> {order.id.slice(0, 8).toUpperCase()}</div>
           <div><strong>Date:</strong> {order.delivery_date}</div>
-          <div><strong>Customer:</strong> {order.user_name ?? "N/A"}</div>
+          <div><strong>Customer:</strong> {order.user_name || order.user_phone || "N/A"}</div>
           {order.user_phone && <div><strong>Phone:</strong> {order.user_phone}</div>}
         </div>
 
         <div className="receipt-divider" />
 
-        {/* Item List */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", marginBottom: "4px" }}>
-            <span>Item</span>
-            <span>Total</span>
-          </div>
-          {items.map((item) => {
+        {/* Item List Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "bold", paddingBottom: "4px", borderBottom: "1px solid #000" }}>
+          <span>Item</span>
+          <span style={{ textAlign: "right" }}>Total</span>
+        </div>
+
+        {/* Item Rows with Clear Segregation */}
+        <div style={{ paddingTop: "6px" }}>
+          {items.map((item, idx) => {
             const price = prices[item.id] ?? item.price_per_unit;
             if (!price) return null;
             const lineTotal = Number(price) * Number(item.requested_qty);
+            const cleanTaName = item.name_ta ? item.name_ta.replace(/^\((.*)\)$/, "$1") : "";
+
             return (
-              <div key={item.id} style={{ marginBottom: "6px" }}>
-                <div style={{ fontWeight: "bold" }}>
-                  {item.name_en} {item.name_ta ? `(${item.name_ta})` : ""}
+              <div
+                key={item.id}
+                style={{
+                  marginBottom: "6px",
+                  paddingBottom: "6px",
+                  borderBottom: idx === items.length - 1 ? "none" : "1px dashed #bbb",
+                }}
+              >
+                <div style={{ fontWeight: "bold", fontSize: "12px" }}>
+                  {item.name_en} {cleanTaName ? `(${cleanTaName})` : ""}
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#333", fontSize: "12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#111", fontSize: "12px", marginTop: "2px" }}>
                   <span>
                     {Number(item.requested_qty)} {item.unit} x ₹{Number(price).toFixed(2)}
                   </span>
@@ -340,13 +351,13 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         {/* Totals */}
         {preview && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px" }}>
               <span>Subtotal:</span>
-              <span>₹{preview.subtotal.toFixed(2)}</span>
+              <span style={{ fontWeight: "bold" }}>₹{preview.subtotal.toFixed(2)}</span>
             </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", marginTop: "2px" }}>
               <span>Delivery Charge:</span>
-              <span>{preview.deliveryCharge === 0 ? "FREE" : `₹${preview.deliveryCharge.toFixed(2)}`}</span>
+              <span style={{ fontWeight: "bold" }}>{preview.deliveryCharge === 0 ? "FREE" : `₹${preview.deliveryCharge.toFixed(2)}`}</span>
             </div>
 
             <div className="receipt-double-divider" />
@@ -359,11 +370,6 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         )}
 
         <div className="receipt-double-divider" />
-
-        <div style={{ textAlign: "center", marginTop: "8px", fontSize: "11px" }}>
-          <div>Payment: Cash on Delivery</div>
-          <div style={{ fontWeight: "bold", marginTop: "4px" }}>Thank you for shopping!</div>
-        </div>
       </div>
 
       {/* Main Web UI (Hidden during print) */}

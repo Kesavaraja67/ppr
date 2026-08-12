@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, order_items, vegetables, shop_config } from "@/drizzle/schema";
+import { orders, order_items, vegetables, shop_config, users, addresses } from "@/drizzle/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { computeDeliveryCharge } from "@/lib/delivery";
@@ -119,8 +119,20 @@ export async function POST(
 
   // Reload for response
   const [updatedOrder] = await db
-    .select()
+    .select({
+      id: orders.id,
+      status: orders.status,
+      delivery_date: orders.delivery_date,
+      subtotal: orders.subtotal,
+      delivery_charge: orders.delivery_charge,
+      total_amount: orders.total_amount,
+      user_phone: users.phone_number,
+      user_name: users.name,
+      address_text: addresses.full_address,
+    })
     .from(orders)
+    .leftJoin(users, eq(orders.user_id, users.id))
+    .leftJoin(addresses, eq(orders.address_id, addresses.id))
     .where(eq(orders.id, orderId))
     .limit(1);
 
@@ -158,8 +170,20 @@ export async function GET(
   const { id: orderId } = await params;
 
   const [order] = await db
-    .select()
+    .select({
+      id: orders.id,
+      status: orders.status,
+      delivery_date: orders.delivery_date,
+      subtotal: orders.subtotal,
+      delivery_charge: orders.delivery_charge,
+      total_amount: orders.total_amount,
+      user_phone: users.phone_number,
+      user_name: users.name,
+      address_text: addresses.full_address,
+    })
     .from(orders)
+    .leftJoin(users, eq(orders.user_id, users.id))
+    .leftJoin(addresses, eq(orders.address_id, addresses.id))
     .where(eq(orders.id, orderId))
     .limit(1);
 

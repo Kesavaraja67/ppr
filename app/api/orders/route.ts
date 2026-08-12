@@ -1,10 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { orders, order_items, addresses, vegetables, users, shop_config } from "@/drizzle/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { haversineDistance } from "@/lib/haversine";
 import { sendTelegramNotification } from "@/lib/telegram";
+
+/** Escapes special HTML characters to prevent broken formatting or HTML injection in Telegram messages. */
+function escapeTelegramHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 /** True when current IST time is within the 8 AM–8 PM ordering window. */
 function isWithinOrderWindow(): boolean {
@@ -364,18 +372,23 @@ export async function POST(req: NextRequest) {
       }))
     );
 
-    // Best-effort shop notification — never throws, never blocks/fails the order response.
+    // Best-effort shop notification via Next.js after() — runs after 201 response is sent.
     // Total is an estimate: real total_amount is null until admin prices the order.
-    await sendTelegramNotification(
-      `🛒 <b>New Order</b>\n` +
-        `Order: #${order.id.slice(0, 8)}\n` +
-        (trimmedName ? `Customer: ${trimmedName}\n` : "") +
-        `Items: ${body.items.length}\n` +
-        (allItemsHavePrices
-          ? `Est. total: ₹${pricedSubtotalAmount.toFixed(0)}\n`
-          : "") +
-        `Delivery: ${deliveryDate}${addressText ? ` — ${addressText}` : ""}`
-    );
+    const safeName = trimmedName ? escapeTelegramHtml(trimmedName) : "";
+    const safeAddress = addressText ? escapeTelegramHtml(addressText) : "";
+
+    after(async () => {
+      await sendTelegramNotification(
+        `🛒 <b>New Order</b>\n` +
+          `Order: #${order.id.slice(0, 8)}\n` +
+          (safeName ? `Customer: ${safeName}\n` : "") +
+          `Items: ${body.items.length}\n` +
+          (allItemsHavePrices
+            ? `Est. total: ₹${pricedSubtotalAmount.toFixed(0)}\n`
+            : "") +
+          `Delivery: ${deliveryDate}${safeAddress ? ` — ${safeAddress}` : ""}`
+      );
+    });
 
     return NextResponse.json({ orderId: order.id }, { status: 201 });
   } catch (err: unknown) {

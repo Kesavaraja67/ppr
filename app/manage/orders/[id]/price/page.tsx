@@ -174,28 +174,8 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     document.body.removeChild(a);
   };
 
-  const handlePrintPdf = () => {
-    if (!order) return;
-    window.open(`/api/admin/orders/${order.id}/pdf`, "_blank");
-  };
-
-  // Direct-to-printer: sends the bill straight to RawBT via its documented Android
-  // intent URL, skipping the manual download → open → "choose app" steps.
-  // Falls back to the existing Print PDF flow on non-Android devices (e.g. iPad),
-  // where this intent scheme has no effect.
-  const handlePrintViaRawBT = () => {
-    if (!order) return;
-    const isAndroid = /android/i.test(navigator.userAgent);
-    if (!isAndroid) {
-      handlePrintPdf();
-      return;
-    }
-    const pdfUrl = `${window.location.origin}/api/admin/orders/${order.id}/pdf`;
-    const intentUrl =
-      "intent:" +
-      encodeURI(pdfUrl) +
-      "#Intent;component=ru.a402d.rawbtprinter.activity.PrintDownloadActivity;package=ru.a402d.rawbtprinter;end;";
-    window.location.href = intentUrl;
+  const handlePrint = () => {
+    window.print();
   };
 
   const handleShare = async () => {
@@ -269,7 +249,16 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
 
   return (
     <div className="page-content" style={{ padding: "16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
+      {/* Print styles matching wholesale purchase list page */}
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          body { background: #fff; }
+          .page-content { padding: 0 !important; max-width: 100% !important; }
+        }
+      `}</style>
+
+      <div className="no-print" style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "20px" }}>
         <button onClick={() => router.back()} style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer" }}>
           ←
         </button>
@@ -279,7 +268,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
         </div>
       </div>
 
-      <p style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "16px" }}>
+      <p className="no-print" style={{ fontSize: "0.82rem", color: "#6b7280", marginBottom: "16px" }}>
         Enter today&apos;s market price for each item. Leave blank for items not available.
       </p>
 
@@ -364,7 +353,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
       {/* Actions */}
       {!saved ? (
         <button
-          className="btn-accent"
+          className="btn-accent no-print"
           style={{ width: "100%", justifyContent: "center", marginBottom: "10px" }}
           onClick={handleSave}
           disabled={saving}
@@ -372,7 +361,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
           {saving ? "Saving…" : "Save & Finalise Bill"}
         </button>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+        <div className="no-print" style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
           <div style={{ display: "flex", gap: "10px" }}>
             <button
               onClick={handleShare}
@@ -400,7 +389,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
             </button>
           </div>
           <button
-            onClick={handlePrintViaRawBT}
+            onClick={handlePrint}
             style={{
               width: "100%",
               padding: "14px",
@@ -422,32 +411,7 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />
             </svg>
-            Print to Thermal Printer
-          </button>
-          <button
-            onClick={handlePrintPdf}
-            style={{
-              width: "100%",
-              padding: "14px",
-              border: "1.5px solid #374151",
-              borderRadius: "9999px",
-              background: "#fff",
-              color: "#374151",
-              fontWeight: 700,
-              cursor: "pointer",
-              textAlign: "center",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 6 2 18 2 18 9" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect x="6" y="14" width="12" height="8" />
-            </svg>
-            Print PDF
+            Print
           </button>
         </div>
       )}

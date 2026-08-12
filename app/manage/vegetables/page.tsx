@@ -198,7 +198,7 @@ export default function AdminVegetablesPage() {
                 });
               }
             })
-            .catch(() => {/* fail silently */})
+            .catch(() => {/* fail silently */ })
             .finally(() => {
               if (formSessionRef.current === session) setTaTranslating(false);
             });
@@ -257,7 +257,7 @@ export default function AdminVegetablesPage() {
                 });
               }
             })
-            .catch(() => {/* fail silently */})
+            .catch(() => {/* fail silently */ })
             .finally(() => {
               if (formSessionRef.current === session) setEnTranslating(false);
             });
@@ -856,8 +856,8 @@ export default function AdminVegetablesPage() {
           {searchQuery.trim()
             ? `No items match "${searchQuery.trim()}".`
             : activeTab === "active"
-            ? "No active items in catalog."
-            : "No removed items in archive."}
+              ? "No active items in catalog."
+              : "No removed items in archive."}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -907,6 +907,15 @@ export default function AdminVegetablesPage() {
                   <p style={{ fontWeight: 700, fontSize: "0.92rem" }}>{veg.name_en}</p>
                   <p style={{ color: "#9ca3af", fontSize: "0.76rem", marginTop: "2px" }}>
                     {veg.name_ta} · {veg.unit} · {veg.category}
+                    {(veg.current_price !== null && veg.current_price !== undefined && veg.current_price !== "") ? (
+                      <span style={{ color: "#166534", fontWeight: 700, marginLeft: "6px" }}>
+                        · Rs. {veg.current_price} / {veg.unit}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#dc2626", fontWeight: 600, marginLeft: "6px" }}>
+                        · No price set
+                      </span>
+                    )}
                   </p>
                 </div>
 

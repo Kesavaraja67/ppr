@@ -1,6 +1,11 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  outputFileTracingIncludes: {
+    "/api/admin/orders/[id]/pdf": [
+      "./node_modules/@fontsource/noto-sans-tamil/files/noto-sans-tamil-tamil-400-normal.woff",
+    ],
+  },
   images: {
     formats: ["image/webp"],
     remotePatterns: [

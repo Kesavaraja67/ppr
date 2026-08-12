@@ -149,6 +149,7 @@ function ConfirmOrderContent() {
   }
 
   const [freshPrices, setFreshPrices] = useState<Map<string, string | null>>(new Map());
+  const clientRequestIdRef = useRef<string>(crypto.randomUUID());
 
   // Load shop config for distance check + delivery thresholds
   useEffect(() => {
@@ -328,6 +329,7 @@ function ConfirmOrderContent() {
         body: JSON.stringify({
           ...(addressPayload as object),
           name: customerName.trim(),
+          client_request_id: clientRequestIdRef.current,
           items: items.map((i) => ({
             veg_id: i.veg_id,
             qty: i.qty,
@@ -345,6 +347,7 @@ function ConfirmOrderContent() {
       }
 
       // Order created successfully — clear order list state and navigate to confirmation
+      clientRequestIdRef.current = crypto.randomUUID();
       clearAll();
       router.push(`/orders/${data.orderId}/confirmed`);
       return true;

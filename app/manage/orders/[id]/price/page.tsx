@@ -179,6 +179,25 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
     window.open(`/api/admin/orders/${order.id}/pdf`, "_blank");
   };
 
+  // Direct-to-printer: sends the bill straight to RawBT via its documented Android
+  // intent URL, skipping the manual download → open → "choose app" steps.
+  // Falls back to the existing Print PDF flow on non-Android devices (e.g. iPad),
+  // where this intent scheme has no effect.
+  const handlePrintViaRawBT = () => {
+    if (!order) return;
+    const isAndroid = /android/i.test(navigator.userAgent);
+    if (!isAndroid) {
+      handlePrintPdf();
+      return;
+    }
+    const pdfUrl = `${window.location.origin}/api/admin/orders/${order.id}/pdf`;
+    const intentUrl =
+      "intent:" +
+      encodeURI(pdfUrl) +
+      "#Intent;component=ru.a402d.rawbtprinter.activity.PrintDownloadActivity;package=ru.a402d.rawbtprinter;end;";
+    window.location.href = intentUrl;
+  };
+
   const handleShare = async () => {
     if (!order || sharingRef.current) return;
     sharingRef.current = true;
@@ -380,6 +399,31 @@ export default function PricingPage({ params }: { params: Promise<{ id: string }
               Download PDF
             </button>
           </div>
+          <button
+            onClick={handlePrintViaRawBT}
+            style={{
+              width: "100%",
+              padding: "14px",
+              border: "1.5px solid #166534",
+              borderRadius: "9999px",
+              background: "#166534",
+              color: "#fff",
+              fontWeight: 700,
+              cursor: "pointer",
+              textAlign: "center",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "8px",
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            Print to Thermal Printer
+          </button>
           <button
             onClick={handlePrintPdf}
             style={{

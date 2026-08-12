@@ -86,18 +86,8 @@ export function useMsg91Widget(captchaRenderId: string) {
       }
     };
 
-    // If script already loaded, check if sendOtp is already bound to avoid duplicate init
+    // If script already loaded, re-run initSendOTP to render a fresh captcha into the container
     if (typeof (window as WindowWithMSG91).initSendOTP === "function") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      if (typeof (window as any).sendOtp === "function") {
-        queueMicrotask(() => {
-          if (!disposed) {
-            setReady(true);
-            setWidgetError(null);
-          }
-        });
-        return cleanup;
-      }
       runInit();
       return cleanup;
     }

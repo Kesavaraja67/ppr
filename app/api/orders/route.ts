@@ -1,9 +1,18 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { db } from "@/lib/db";
 import { orders, order_items, addresses, vegetables, users, shop_config } from "@/drizzle/schema";
 import { eq, and, desc, inArray } from "drizzle-orm";
 import { getCustomerSession } from "@/lib/customer-auth";
 import { haversineDistance } from "@/lib/haversine";
+import { sendTelegramNotification } from "@/lib/telegram";
+
+/** Escapes special HTML characters to prevent broken formatting or HTML injection in Telegram messages. */
+function escapeTelegramHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
 /** True when current IST time is within the 8 AM–8 PM ordering window. */
 function isWithinOrderWindow(): boolean {
@@ -53,7 +62,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enforce ordering hours (bypassed for 24/7)
+    // Enforce ordering hours
     if (!isWithinOrderWindow()) {
       console.error("[orders] Rejected: outside order window", { clientRequestId: correlationId });
       return NextResponse.json(
@@ -199,6 +208,7 @@ export async function POST(req: NextRequest) {
 
     // Resolve address ID
     let addressId: string;
+    let addressText = ""; // captured only for the Telegram notification below; never affects order logic
 
     if (body.new_address) {
       // Recompute delivery-zone check server-side — never trust the client value
@@ -231,6 +241,7 @@ export async function POST(req: NextRequest) {
         .returning({ id: addresses.id });
 
       addressId = savedAddress.id;
+      addressText = body.new_address.full_address;
     } else if (body.address_id) {
       // Verify address belongs to this user
       const [addr] = await db
@@ -283,6 +294,7 @@ export async function POST(req: NextRequest) {
       }
 
       addressId = addr.id;
+      addressText = addr.full_address;
 
     } else {
       return NextResponse.json({ error: "Address is required" }, { status: 400 });
@@ -359,6 +371,24 @@ export async function POST(req: NextRequest) {
         unit: item.unit || vegMap.get(item.veg_id)?.unit || "kg",
       }))
     );
+
+    // Best-effort shop notification via Next.js after() — runs after 201 response is sent.
+    // Total is an estimate: real total_amount is null until admin prices the order.
+    const safeName = trimmedName ? escapeTelegramHtml(trimmedName) : "";
+    const safeAddress = addressText ? escapeTelegramHtml(addressText) : "";
+
+    after(async () => {
+      await sendTelegramNotification(
+        `🛒 <b>New Order</b>\n` +
+          `Order: #${order.id.slice(0, 8)}\n` +
+          (safeName ? `Customer: ${safeName}\n` : "") +
+          `Items: ${body.items.length}\n` +
+          (allItemsHavePrices
+            ? `Est. total: ₹${pricedSubtotalAmount.toFixed(0)}\n`
+            : "") +
+          `Delivery: ${deliveryDate}${safeAddress ? ` — ${safeAddress}` : ""}`
+      );
+    });
 
     return NextResponse.json({ orderId: order.id }, { status: 201 });
   } catch (err: unknown) {
